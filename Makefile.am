@@ -1,0 +1,1 @@
+SUBDIRS=libopenkey include exampleProgram
