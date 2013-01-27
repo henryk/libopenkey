@@ -8,13 +8,7 @@ that all three roles can coexist in one directory.
 === File producer, generated on bootstrap ===
 
 First line: Magic sequence "libopenkey producer secret key storage v1"
-Subsequent lines contain one master key per line (hexadecimal, upper case, bytes space separated) in this order:
-PICC master key
-App 0 master key
-App 1 master key
-App 2 master key
- ... etc. up to ...
-App 15 master key
+Second line: producer master key (hexadecimal, upper case, bytes space separated)
 
 === File log, updated on card creation ===
 
@@ -23,7 +17,7 @@ In each line there are three items separated by spaces: timestamp (Posix time() 
 === Directory <UID>-<card name>, updated on card creation ===
 
 The UID is formatted as hexadecimal, upper case, no spaces. The card name is sanitized and may only include alphanumeric characters, space, - and _
-For each app 1 through 15 there is a file in this directory.
+For each app 0 through 14 there is a file in this directory.
 
 ==== File <card name>-<app number>, generated on card creation ====
 
@@ -52,20 +46,17 @@ Imports file lock from door manager role
 
 
 = DESfire card layout =
-PICC master key is set to KDF(master PICC master key, UID), free format disallowed, random UID enabled,
+PICC master key is set to KDF(producer master key, "00 00 00", "00", UID), free format disallowed, random UID enabled,
 free create/delete disabled, free list disabled, configuration changeable, master key not changeable.
 
 The AIDs are based on 0xFF77F0, which is a Mifare Classic mapped AID (0xF....?), in the middle (0x7f) of an unassigned function cluster (0xF7).
 
-== App 0, AID 0xFF77F0 currently undefined ==
-This application is reserved and may get administrative uses?
-
 == App Z, AID 0xFF77FZ ==
 
-Application security is AES, 3 keys per application, configuration changeable, master key not changeable, free create/delete disallowed, free list disallowed, change key rights set to "same key"
+Application security is AES, 3 keys per application, configuration not changeable, master key not changeable, free create/delete disallowed, free list disallowed, change key rights set to "same key"
 
 === Key 0, Application master key ===
-KDF(master App Z master key, UID)
+KDF(producer master key, AID, "00", UID)
 
 === Key 1, Application read key ===
 Before owning: application transport read key
@@ -73,9 +64,18 @@ After owning: application read key, no derivation applied
 
 === Key 2, Application authentication key ===
 Before owning: application transport authentication key
-After owning: KDF(master application authentication key, UUID)
+After owning: KDF(master application authentication key, AID, "02", UUID)
 
 === File 1 ===
 
-Data file, 36 bytes, file number 1, fully enciphered communication. Read: key 1, Write: never, Read&write: Never, Change access rights: Key 0
+Data file, 36 bytes, file number 1, fully enciphered communication. Read: key 1, Write: never, Read&write: Never, Change access rights: Never
 Contents: UUID (standard dash format, lower case)
+
+== App 15, AID 0xFF77FF currently undefined ==
+This application is reserved and may get administrative uses?
+
+= Algorithms =
+
+== KDF(MK, AID, KEYNO, ID) ==
+
+HMAC-SHA256(MK, AID || KEYNO || ID), truncated from the beginning to the necessary key length
