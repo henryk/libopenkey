@@ -19,6 +19,8 @@ dnl Check if Libtool is present
 dnl Libtool is used for building share libraries 
 AC_PROG_LIBTOOL
 
+PKG_CHECK_MODULES([DEPS], [libfreefare >= 0.3.5])
+
 AC_CONFIG_FILES(Makefile
                 exampleProgram/Makefile
                 libopenkey/Makefile
