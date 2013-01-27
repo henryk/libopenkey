@@ -1,0 +1,81 @@
+= Secret Key Storage =
+Secret key storage on producer and manager/authenticator is organized as a
+simple directory tree. The directory structure is mutually compatible so
+that all three roles can coexist in one directory.
+
+== Role Producer ==
+
+=== File producer, generated on bootstrap ===
+
+First line: Magic sequence "libopenkey producer secret key storage v1"
+Subsequent lines contain one master key per line (hexadecimal, upper case, bytes space separated) in this order:
+PICC master key
+App 0 master key
+App 1 master key
+App 2 master key
+ ... etc. up to ...
+App 15 master key
+
+=== File log, updated on card creation ===
+
+In each line there are three items separated by spaces: timestamp (Posix time() return value), UID (hexadecimal, upper case, no spaces), card name (until the end of line)
+
+=== Directory <UID>-<card name>, updated on card creation ===
+
+The UID is formatted as hexadecimal, upper case, no spaces. The card name is sanitized and may only include alphanumeric characters, space, - and _
+For each app 1 through 15 there is a file in this directory.
+
+==== File <card name>-<app number>, generated on card creation ====
+
+First line: Magic sequence "libopenkey transport key file v1"
+Second line: card name
+Third line: card app UUID (standard dash format, lower case)
+Fourth line: application transport read key (hexadecimal, upper case, bytes space separated)
+Fifth line: application transport authentication key (hexadecimal, upper case, bytes space separated)
+
+== Role Door Manager ==
+
+=== File lock, generated on bootstrap ===
+
+First line: Magic sequence "libopenkey lock secret key storage v1"
+Second line: space separated list of integers indicating slots to search for an accessible card, -1 means "all remaining". Generated on bootstrap as "preferred_slot -1"
+Third line: application read key  (hexadecimal, upper case, bytes space separated)
+Fourth line: master application authentication key (hexadecimal, upper case, bytes space separated)
+
+=== Directory cards, updated on card owning ===
+
+Contains a copy of the <card name>-<app number> file (with file name of <card app UUID> in standard dash format, lower case) for every card owned.
+
+== Role Card Authenticator ===
+
+Imports file lock from door manager role
+
+
+= DESfire card layout =
+PICC master key is set to KDF(master PICC master key, UID), free format disallowed, random UID enabled,
+free create/delete disabled, free list disabled, configuration changeable, master key not changeable.
+
+The AIDs are based on 0xFF77F0, which is a Mifare Classic mapped AID (0xF....?), in the middle (0x7f) of an unassigned function cluster (0xF7).
+
+== App 0, AID 0xFF77F0 currently undefined ==
+This application is reserved and may get administrative uses?
+
+== App Z, AID 0xFF77FZ ==
+
+Application security is AES, 3 keys per application, configuration changeable, master key not changeable, free create/delete disallowed, free list disallowed, change key rights set to "same key"
+
+=== Key 0, Application master key ===
+KDF(master App Z master key, UID)
+
+=== Key 1, Application read key ===
+Before owning: application transport read key
+After owning: application read key, no derivation applied
+
+=== Key 2, Application authentication key ===
+Before owning: application transport authentication key
+After owning: KDF(master application authentication key, UUID)
+
+=== File 1 ===
+
+Data file, 36 bytes, file number 1, fully enciphered communication. Read: key 1, Write: never, Read&write: Never, Change access rights: Key 0
+Contents: UUID (standard dash format, lower case)
