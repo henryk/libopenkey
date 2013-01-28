@@ -41,5 +41,7 @@ int main(void) {
 		printf("Card producer was already bootstrapped\n");
 	}
 
+	openkey_fini(ctx);
+
 	return 0;
 }

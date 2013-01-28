@@ -11,6 +11,7 @@
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 
 #define AES_KEY_LENGTH 16
+#define AES_KEY_LINE_LENGTH  (2*(AES_KEY_LENGTH*3)) /* Includes some allowance for editing and extra spaces */
 
 #define ROLEMASK(x) (1<<(x))
 
@@ -73,7 +74,7 @@ int openkey_fini(openkey_context_t ctx)
 	if(ctx->a.authenticator_path != NULL) free(ctx->a.authenticator_path);
 
 	memset(ctx, 0, sizeof(*ctx));
-	free(ctx);
+	gcry_free(ctx);
 
 	return 0;
 }
@@ -133,6 +134,42 @@ static char *_serialize_key(const uint8_t *key, size_t key_length)
 	}
 
 	return serialized;
+}
+
+static int _unserialize_key(const char *input, uint8_t *output, size_t output_length)
+{
+	size_t inpos = 0, outpos = 0;
+	uint8_t b = 0;
+
+	if(input[inpos] != 0) {
+		do {
+			int nibble = -1;
+
+			if(input[inpos] >= '0' && input[inpos] <= '9') {
+				nibble = input[inpos] - '0';
+			} else if(input[inpos] >= 'A' && input[inpos] <= 'F') {
+				nibble = input[inpos] - 'A' + 0xa;
+			} else if(input[inpos] >= 'a' && input[inpos] <= 'f') {
+				nibble = input[inpos] - 'a' + 0xa;
+			}
+
+			if(nibble != -1) {
+				b = (b<<4) | nibble;
+				if(outpos % 2 == 1) {
+					output[outpos/2] = b;
+					b = 0;
+				}
+				outpos++;
+			}
+
+		} while(input[++inpos] != 0);
+	}
+
+	if(outpos == 2*output_length) {
+		return 0;
+	} else {
+		return -1;
+	}
 }
 
 static char *_concat_paths(const char *a, const char *b)
@@ -209,15 +246,55 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 	}
 
 	FILE *producer_store = _fopen_in_dir(ctx->p.producer_path, "producer", "r", 0);
-	if(producer_store != NULL) {
-		/* TODO Read producer key, set bootstrapped to 1 */
+	char *line_buffer = NULL;
+	size_t line_buffer_length = AES_KEY_LINE_LENGTH;
+	int retval = -0x11;
 
-		fclose(producer_store);
+	if(producer_store != NULL) {
+		line_buffer = gcry_malloc_secure(line_buffer_length);
+		if(line_buffer == NULL) {
+			goto abort;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, producer_store) == NULL) {
+			goto abort;
+		}
+
+		size_t l = strlen(line_buffer);
+		if(l != strlen(OPENKEY_PRODUCER_MAGIC_V1)+1) {
+			goto abort;
+		}
+
+		if(strncmp(OPENKEY_PRODUCER_MAGIC_V1, line_buffer, strlen(OPENKEY_PRODUCER_MAGIC_V1)) != 0) {
+			goto abort;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, producer_store) == NULL) {
+			goto abort;
+		}
+
+		if(_unserialize_key(line_buffer, ctx->p.master_key, sizeof(ctx->p.master_key)) < 0) {
+			memset(ctx->p.master_key, 0, sizeof(ctx->p.master_key));
+			goto abort;
+		}
+
+		ctx->p.bootstrapped = 1;
 	}
 
 	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_CARD_PRODUCER);
+	retval = 0;
 
-	return 0;
+abort:
+	if(producer_store != NULL) {
+		fclose(producer_store);
+	}
+
+	if(line_buffer != NULL) {
+		memset(line_buffer, 0, line_buffer_length);
+		gcry_free(line_buffer);
+	}
+
+	return retval;
 }
 
 static int _add_manager(openkey_context_t ctx, const char *base_path)
