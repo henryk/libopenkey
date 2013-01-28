@@ -20,7 +20,7 @@ exampleProgram_SOURCES= exampleProgram.c
 
 # Linker options for a.out
 exampleProgram_LDFLAGS = $(top_srcdir)/libopenkey/libopenkey.la
-exampleProgram_LDADD = $(DEPS_LIBS)
+exampleProgram_LDADD = $(DEPS_LIBS) $(LIBGCRYPT_LIBS)
 
 # Compiler options for a.out
 exampleProgram_CPPFLAGS = -I$(top_srcdir)/include $(DEPS_CFLAGS)

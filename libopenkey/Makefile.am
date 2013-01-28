@@ -15,6 +15,6 @@ libopenkey_la_LDFLAGS =
 
 # Compiler options. Here we are adding the include directory
 # to be searched for headers included in the source code.
-libopenkey_la_CPPFLAGS = -I$(top_srcdir)/include $(DEPS_CFLAGS)
-libopenkey_la_LIBADD = $(DEPS_LIBS)
+libopenkey_la_CPPFLAGS = -Wall -pedantic -Werror -I$(top_srcdir)/include $(DEPS_CFLAGS) $(LIBGCRYPT_CFLAGS)
+libopenkey_la_LIBADD = $(DEPS_LIBS) $(LIBGCRYPT_LIBS)
 

@@ -26,7 +26,7 @@ extern int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int sl
 extern int openkey_manager_card_disown(openkey_context_t ctx, MifareTag tag, const char *card_name);
 #endif
 
-extern int openkey_authenticator_prepare(openkey_context_t ctx, int preferred_slot);
+extern int openkey_authenticator_prepare(openkey_context_t ctx);
 extern int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id);
 
 extern int openkey_fini(openkey_context_t ctx);

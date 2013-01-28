@@ -11,6 +11,7 @@ AM_INIT_AUTOMAKE
 
 dnl this allows us specify individual liking flags for each target
 AM_PROG_CC_C_O 
+AC_PROG_CC_C99
 
 dnl Initialize Libtool
 LT_INIT
@@ -20,6 +21,8 @@ dnl Libtool is used for building share libraries
 AC_PROG_LIBTOOL
 
 PKG_CHECK_MODULES([DEPS], [libfreefare >= 0.3.5])
+
+AM_PATH_LIBGCRYPT
 
 AC_CONFIG_FILES(Makefile
                 exampleProgram/Makefile

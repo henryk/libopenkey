@@ -15,7 +15,31 @@
 
 #include "libopenkey.h"
 
-int main(void) {
+#include <stdio.h>
+#include <stdlib.h>
 
-  return 0;
+int main(void) {
+	openkey_context_t ctx = openkey_init();
+
+	if(ctx == NULL) {
+		fprintf(stderr, "Could not init openkey\n");
+		exit(1);
+	}
+
+	if(openkey_role_add(ctx, OPENKEY_ROLE_CARD_PRODUCER, "foo") < 0) {
+		fprintf(stderr, "Could not add card producer role\n");
+		exit(2);
+	}
+
+	int r = openkey_producer_bootstrap(ctx);
+	if(r < 0) {
+		fprintf(stderr, "Could not bootstrap card producer role\n");
+		exit(3);
+	} else if(r == 0) {
+		printf("Card producer bootstrapped\n");
+	} else {
+		printf("Card producer was already bootstrapped\n");
+	}
+
+	return 0;
 }
