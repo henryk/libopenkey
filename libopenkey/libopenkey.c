@@ -10,7 +10,7 @@
 
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 
-#define AES_KEY_LENGTH 128
+#define AES_KEY_LENGTH 16
 
 #define ROLEMASK(x) (1<<(x))
 
@@ -214,6 +214,8 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 
 		fclose(producer_store);
 	}
+
+	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_CARD_PRODUCER);
 
 	return 0;
 }
