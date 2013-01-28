@@ -41,6 +41,23 @@ int main(void) {
 		printf("Card producer was already bootstrapped\n");
 	}
 
+	if(r >= 0) {
+		if(openkey_role_add(ctx, OPENKEY_ROLE_LOCK_MANAGER, "foo") < 0) {
+			fprintf(stderr, "Could not add lock manager role\n");
+			exit(4);
+		}
+
+		r = openkey_manager_bootstrap(ctx, 5);
+		if(r < 0) {
+			fprintf(stderr, "Could not bootstrap lock manager role\n");
+			exit(5);
+		} else if(r == 0) {
+			printf("Lock manager bootstrapped\n");
+		} else {
+			printf("Lock manager was already bootstrapped\n");
+		}
+	}
+
 	openkey_fini(ctx);
 
 	return 0;

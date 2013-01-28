@@ -9,6 +9,10 @@
 #include <gcrypt.h>
 
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
+static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key storage v1";
+
+#define SLOT_MIN 0
+#define SLOT_MAX 14
 
 #define AES_KEY_LENGTH 16
 #define AES_KEY_LINE_LENGTH  (2*(AES_KEY_LENGTH*3)) /* Includes some allowance for editing and extra spaces */
@@ -239,11 +243,12 @@ static int _ensure_directory(const char *dirname)
 
 static int _add_producer(openkey_context_t ctx, const char *base_path)
 {
-	ctx->p.producer_path = strdup(base_path);
-
-	if(_ensure_directory(ctx->p.producer_path) < 0) {
+	if(_ensure_directory(base_path) < 0) {
 		return -0x10;
 	}
+
+	ctx->p.producer_path = strdup(base_path);
+
 
 	FILE *producer_store = _fopen_in_dir(ctx->p.producer_path, "producer", "r", 0);
 	char *line_buffer = NULL;
@@ -274,7 +279,6 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 		}
 
 		if(_unserialize_key(line_buffer, ctx->p.master_key, sizeof(ctx->p.master_key)) < 0) {
-			memset(ctx->p.master_key, 0, sizeof(ctx->p.master_key));
 			goto abort;
 		}
 
@@ -294,12 +298,116 @@ abort:
 		gcry_free(line_buffer);
 	}
 
+	if(!ctx->p.bootstrapped) {
+		memset(ctx->p.master_key, 0, sizeof(ctx->p.master_key));
+	}
+
 	return retval;
 }
 
 static int _add_manager(openkey_context_t ctx, const char *base_path)
 {
-	return -1;
+	if(_ensure_directory(base_path) < 0) {
+		return -0x10;
+	}
+
+	ctx->m.manager_path = strdup(base_path);
+
+
+	FILE *lock_store = _fopen_in_dir(ctx->m.manager_path, "lock", "r", 0);
+	char *line_buffer = NULL;
+	size_t line_buffer_length = AES_KEY_LINE_LENGTH;
+	int retval = -0x11;
+
+	if(lock_store != NULL) {
+		line_buffer = gcry_malloc_secure(line_buffer_length);
+		if(line_buffer == NULL) {
+			goto abort;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+			goto abort;
+		}
+
+		size_t l = strlen(line_buffer);
+		if(l != strlen(OPENKEY_LOCK_MAGIC_V1)+1) {
+			goto abort;
+		}
+
+		if(strncmp(OPENKEY_LOCK_MAGIC_V1, line_buffer, strlen(OPENKEY_LOCK_MAGIC_V1)) != 0) {
+			goto abort;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+			goto abort;
+		}
+
+		ctx->m.l.slot_list_length = 0;
+		char *strtol_begin = line_buffer;
+		while(ctx->m.l.slot_list_length < (sizeof(ctx->m.l.slot_list)/sizeof(ctx->m.l.slot_list[0]))) {
+			char *strtol_end = NULL;
+
+			int value = strtol(strtol_begin, &strtol_end, 0);
+
+			if(strtol_begin == strtol_end) {
+				break;
+			}
+
+			if(value != -1 && (value < SLOT_MIN || value > SLOT_MAX)) {
+				goto abort;
+			}
+
+			ctx->m.l.slot_list[ctx->m.l.slot_list_length++] = value;
+
+			strtol_begin = strtol_end;
+		}
+
+		if(ctx->m.l.slot_list_length == 0) {
+			ctx->m.l.slot_list[0] = -1;
+			ctx->m.l.slot_list_length = 1;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+			goto abort;
+		}
+
+		if(_unserialize_key(line_buffer, ctx->m.l.read_key, sizeof(ctx->m.l.read_key)) < 0) {
+			memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
+			goto abort;
+		}
+
+		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+			goto abort;
+		}
+
+		if(_unserialize_key(line_buffer, ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key)) < 0) {
+			memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
+			goto abort;
+		}
+
+		ctx->m.bootstrapped = 1;
+	}
+
+	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER);
+	retval = 0;
+
+abort:
+	if(lock_store != NULL) {
+		fclose(lock_store);
+	}
+
+	if(line_buffer != NULL) {
+		memset(line_buffer, 0, line_buffer_length);
+		gcry_free(line_buffer);
+	}
+
+	if(!ctx->m.bootstrapped) {
+		ctx->m.l.slot_list_length = 0;
+		memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
+		memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
+	}
+
+	return retval;
 }
 
 static int _add_authenticator(openkey_context_t ctx, const char *base_path)
@@ -339,6 +447,7 @@ int openkey_producer_bootstrap(openkey_context_t ctx)
 	}
 
 	retval = 0;
+	ctx->p.bootstrapped = 1;
 
 abort:
 	if(serialized_key != NULL) {
@@ -346,13 +455,100 @@ abort:
 		gcry_free(serialized_key);
 	}
 
+	if(fh != NULL) {
+		fclose(fh);
+	}
+
 	if(retval < 0) {
 		memset(ctx->p.master_key, 0, sizeof(ctx->p.master_key));
-		if(fh != NULL) {
-			fclose(fh);
-		}
 		_unlink_in_dir(ctx->p.producer_path, "producer");
 	}
 
 	return retval;
+}
+
+int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
+{
+	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER))) {
+		return -1;
+	}
+
+	if(ctx->m.bootstrapped) {
+		return 1;
+	}
+
+	ctx->m.l.slot_list[0] = preferred_slot;
+	ctx->m.l.slot_list[1] = -1;
+	ctx->m.l.slot_list_length = 2;
+
+	gcry_randomize(ctx->m.l.read_key, sizeof(ctx->m.l.read_key), GCRY_VERY_STRONG_RANDOM);
+	gcry_randomize(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key), GCRY_VERY_STRONG_RANDOM);
+
+	FILE *fh = NULL;
+	char *serialized_authentication_key = NULL, *serialized_read_key = NULL;
+	int retval = -1;
+	fh = _fopen_in_dir(ctx->m.manager_path, "lock", "w", S_IRWXG | S_IRWXO);
+
+	if(fh == NULL) {
+		goto abort;
+	}
+
+	serialized_authentication_key = _serialize_key(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key));
+	if(serialized_authentication_key == NULL) {
+		goto abort;
+	}
+
+	serialized_read_key = _serialize_key(ctx->m.l.read_key, sizeof(ctx->m.l.read_key));
+	if(serialized_read_key == NULL) {
+		goto abort;
+	}
+
+	int written = fprintf(fh, "%s\n", OPENKEY_LOCK_MAGIC_V1);
+	if(written < strlen(OPENKEY_LOCK_MAGIC_V1) + 1) {
+		goto abort;
+	}
+
+	for(int i=0; i<ctx->m.l.slot_list_length; i++) {
+		written = fprintf(fh, (i==0) ? "%i" : " %i", ctx->m.l.slot_list[i]);
+		if(written <= 0) {
+			goto abort;
+		}
+	}
+
+	written = fprintf(fh, "\n");
+	if(written != 1) {
+		goto abort;
+	}
+
+	written = fprintf(fh, "%s\n%s\n", serialized_read_key, serialized_authentication_key);
+	if(written < strlen(serialized_read_key) + 1 + strlen(serialized_authentication_key) + 1) {
+		goto abort;
+	}
+
+	retval = 0;
+	ctx->m.bootstrapped = 1;
+
+abort:
+	if(serialized_authentication_key != NULL) {
+		memset(serialized_authentication_key, 0, strlen(serialized_authentication_key));
+		gcry_free(serialized_authentication_key);
+	}
+
+	if(serialized_read_key != NULL) {
+		memset(serialized_read_key, 0, strlen(serialized_read_key));
+		gcry_free(serialized_read_key);
+	}
+
+	if(fh != NULL) {
+		fclose(fh);
+	}
+
+	if(retval < 0) {
+		memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
+		memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
+		_unlink_in_dir(ctx->m.manager_path, "lock");
+	}
+
+	return retval;
+
 }
