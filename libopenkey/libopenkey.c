@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <gcrypt.h>
+#include <uuid/uuid.h>
 
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key storage v1";
@@ -48,6 +49,21 @@ struct openkey_context {
 
 		struct lock_data l;
 	} a;
+};
+
+struct card_data {
+	char *card_name;
+	uint8_t uid[10];
+	size_t uid_length;
+
+	uint8_t picc_master_key[AES_KEY_LENGTH];
+
+	struct {
+		uuid_t app_uuid;
+		uint8_t app_master_key[AES_KEY_LENGTH];
+		uint8_t app_transport_read_key[AES_KEY_LENGTH];
+		uint8_t app_transport_authentication_key[AES_KEY_LENGTH];
+	} app[15];
 };
 
 openkey_context_t openkey_init()
