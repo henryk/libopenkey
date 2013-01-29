@@ -58,6 +58,21 @@ int main(void) {
 		}
 	}
 
+	if(r >= 0) {
+		if(openkey_role_add(ctx, OPENKEY_ROLE_CARD_AUTHENTICATOR, "foo") < 0) {
+			fprintf(stderr, "Could not add card authenticator role\n");
+			exit(6);
+		}
+
+		r = openkey_authenticator_prepare(ctx);
+		if(r < 0) {
+			fprintf(stderr, "Could not prepare card authenticator role\n");
+			exit(7);
+		} else {
+			printf("Card authenticator prepared\n");
+		}
+	}
+
 	openkey_fini(ctx);
 
 	return 0;

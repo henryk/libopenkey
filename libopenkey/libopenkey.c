@@ -305,19 +305,12 @@ abort:
 	return retval;
 }
 
-static int _add_manager(openkey_context_t ctx, const char *base_path)
+static int _load_lock_data(struct lock_data *ld, const char *path)
 {
-	if(_ensure_directory(base_path) < 0) {
-		return -0x10;
-	}
-
-	ctx->m.manager_path = strdup(base_path);
-
-
-	FILE *lock_store = _fopen_in_dir(ctx->m.manager_path, "lock", "r", 0);
+	FILE *lock_store = _fopen_in_dir(path, "lock", "r", 0);
 	char *line_buffer = NULL;
 	size_t line_buffer_length = AES_KEY_LINE_LENGTH;
-	int retval = -0x11;
+	int retval = -1;
 
 	if(lock_store != NULL) {
 		line_buffer = gcry_malloc_secure(line_buffer_length);
@@ -342,9 +335,9 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 			goto abort;
 		}
 
-		ctx->m.l.slot_list_length = 0;
+		ld->slot_list_length = 0;
 		char *strtol_begin = line_buffer;
-		while(ctx->m.l.slot_list_length < (sizeof(ctx->m.l.slot_list)/sizeof(ctx->m.l.slot_list[0]))) {
+		while(ld->slot_list_length < (sizeof(ld->slot_list)/sizeof(ld->slot_list[0]))) {
 			char *strtol_end = NULL;
 
 			int value = strtol(strtol_begin, &strtol_end, 0);
@@ -357,22 +350,21 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 				goto abort;
 			}
 
-			ctx->m.l.slot_list[ctx->m.l.slot_list_length++] = value;
+			ld->slot_list[ld->slot_list_length++] = value;
 
 			strtol_begin = strtol_end;
 		}
 
-		if(ctx->m.l.slot_list_length == 0) {
-			ctx->m.l.slot_list[0] = -1;
-			ctx->m.l.slot_list_length = 1;
+		if(ld->slot_list_length == 0) {
+			ld->slot_list[0] = -1;
+			ld->slot_list_length = 1;
 		}
 
 		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
 			goto abort;
 		}
 
-		if(_unserialize_key(line_buffer, ctx->m.l.read_key, sizeof(ctx->m.l.read_key)) < 0) {
-			memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
+		if(_unserialize_key(line_buffer, ld->read_key, sizeof(ld->read_key)) < 0) {
 			goto abort;
 		}
 
@@ -380,16 +372,14 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 			goto abort;
 		}
 
-		if(_unserialize_key(line_buffer, ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key)) < 0) {
-			memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
+		if(_unserialize_key(line_buffer, ld->master_authentication_key, sizeof(ld->master_authentication_key)) < 0) {
 			goto abort;
 		}
 
-		ctx->m.bootstrapped = 1;
+		retval = 1;
+	} else {
+		retval = 0;
 	}
-
-	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER);
-	retval = 0;
 
 abort:
 	if(lock_store != NULL) {
@@ -401,18 +391,64 @@ abort:
 		gcry_free(line_buffer);
 	}
 
-	if(!ctx->m.bootstrapped) {
-		ctx->m.l.slot_list_length = 0;
-		memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
-		memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
+	if(retval <= 0) {
+		ld->slot_list_length = 0;
+		memset(ld->read_key, 0, sizeof(ld->read_key));
+		memset(ld->master_authentication_key, 0, sizeof(ld->master_authentication_key));
 	}
+
+	return retval;
+}
+
+
+static int _add_manager(openkey_context_t ctx, const char *base_path)
+{
+	if(_ensure_directory(base_path) < 0) {
+		return -0x10;
+	}
+
+	ctx->m.manager_path = strdup(base_path);
+
+	int r = _load_lock_data(&ctx->m.l, ctx->m.manager_path);
+	int retval = -0x11;
+
+	if(r == 1) {
+		ctx->m.bootstrapped = 1;
+	} else if(r < 0) {
+		goto abort;
+	}
+
+	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER);
+	retval = 0;
+
+abort:
 
 	return retval;
 }
 
 static int _add_authenticator(openkey_context_t ctx, const char *base_path)
 {
-	return -1;
+	if(_ensure_directory(base_path) < 0) {
+		return -0x10;
+	}
+
+	ctx->a.authenticator_path = strdup(base_path);
+
+	int r = _load_lock_data(&ctx->a.l, ctx->a.authenticator_path);
+	int retval = -0x11;
+
+	if(r == 1) {
+		ctx->a.prepared = 1;
+	} else if(r < 0) {
+		goto abort;
+	}
+
+	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_CARD_AUTHENTICATOR);
+	retval = 0;
+
+abort:
+
+	return retval;
 }
 
 int openkey_producer_bootstrap(openkey_context_t ctx)
@@ -551,4 +587,17 @@ abort:
 
 	return retval;
 
+}
+
+int openkey_authenticator_prepare(openkey_context_t ctx)
+{
+	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_CARD_AUTHENTICATOR))) {
+		return -1;
+	}
+
+	if(ctx->a.prepared) {
+		return 1;
+	}
+
+	return -1;
 }
