@@ -46,7 +46,7 @@ Imports file lock from door manager role
 
 
 = DESfire card layout =
-PICC master key is set to KDF(producer master key, "00 00 00", "00", UID), free format disallowed, random UID enabled,
+PICC master key is set to KDF(producer master key, "00 00 00", "00", UID), random UID enabled,
 free create/delete disabled, free list disabled, configuration changeable, master key not changeable.
 
 The AIDs are based on 0xFF77F0, which is a Mifare Classic mapped AID (0xF....?), in the middle (0x7f) of an unassigned function cluster (0xF7).
@@ -77,5 +77,5 @@ This application is reserved and may get administrative uses?
 = Algorithms =
 
 == KDF(MK, AID, KEYNO, ID) ==
-
+AID is used in NXP order (e.g. little endian)
 HMAC-SHA256(MK, AID || KEYNO || ID), truncated from the beginning to the necessary key length

@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <gcrypt.h>
 #include <uuid/uuid.h>
@@ -17,6 +18,8 @@ static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key st
 
 #define AES_KEY_LENGTH 16
 #define AES_KEY_LINE_LENGTH  (2*(AES_KEY_LENGTH*3)) /* Includes some allowance for editing and extra spaces */
+
+#define MASTER_AID 0x0
 
 #define ROLEMASK(x) (1<<(x))
 
@@ -616,4 +619,132 @@ int openkey_authenticator_prepare(openkey_context_t ctx)
 	}
 
 	return -1;
+}
+
+#define HMAC_ALGORITHM GCRY_MD_SHA256
+int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
+		const uint8_t *data, size_t data_length,
+		uint8_t *derived_key, size_t derived_key_length)
+{
+	int retval = -1;
+	gcry_md_hd_t md = NULL;
+
+	if(derived_key_length > gcry_md_get_algo_dlen(HMAC_ALGORITHM)) {
+		goto abort;
+	}
+
+	if(master_key == NULL || derived_key == NULL) {
+		goto abort;
+	}
+
+	if(data == NULL && data_length != 0) {
+		goto abort;
+	}
+
+	int r = gcry_md_open(&md, HMAC_ALGORITHM, GCRY_MD_FLAG_SECURE|GCRY_MD_FLAG_HMAC);
+	if(r) {
+		goto abort;
+	}
+
+	r = gcry_md_setkey(md, master_key, master_key_length);
+	if(r) {
+		goto abort;
+	}
+
+	gcry_md_putc(md, (aid >> 0)&0xff);
+	gcry_md_putc(md, (aid >> 8)&0xff);
+	gcry_md_putc(md, (aid >> 16)&0xff);
+
+	gcry_md_putc(md, key_no);
+
+	if(data != NULL) {
+		gcry_md_write(md, data, data_length);
+	}
+
+	gcry_md_final(md);
+
+	memcpy(derived_key, gcry_md_read(md, HMAC_ALGORITHM), derived_key_length);
+
+	retval = 0;
+
+abort:
+	if(md != NULL) {
+		gcry_md_close(md);
+	}
+	return retval;
+}
+
+
+#define DO_ABORT(x) { retval = x; goto abort; }
+int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name)
+{
+	int retval = -1;
+	struct card_data *cd = NULL;
+	struct mifare_desfire_version_info version_info;
+
+	if(ctx == NULL || tag == NULL || !ctx->p.bootstrapped) {
+		return -1;
+	}
+
+	cd = gcry_calloc_secure(1, sizeof(*cd));
+	if(cd == NULL)
+		DO_ABORT(-2)
+
+	cd->card_name = strdup(card_name);
+	if(cd->card_name == NULL)
+		DO_ABORT(-3)
+
+	/* 0th connect */
+	int r = mifare_desfire_connect(tag);
+	if(r < 0)
+		DO_ABORT(-4);
+
+	/* 1st read UID */
+	r = mifare_desfire_get_version(tag, &version_info);
+	if(r < 0)
+		DO_ABORT(-5);
+
+	uint8_t zero_uid[7] = {0};
+	assert(sizeof(zero_uid) == sizeof(version_info.uid));
+	if(memcmp(version_info.uid, zero_uid, sizeof(zero_uid)) == 0)
+		DO_ABORT(-6); /* Random UID is already enabled */
+
+	memcpy(cd->uid, version_info.uid, sizeof(version_info.uid));
+	cd->uid_length = sizeof(version_info.uid);
+
+	/* 2nd derive all derived keys */
+	r = openkey_kdf(ctx->p.master_key, sizeof(ctx->p.master_key), MASTER_AID, 0x00, cd->uid, cd->uid_length,
+			cd->picc_master_key, sizeof(cd->picc_master_key));
+	if(r  < 0 )
+		DO_ABORT(-7);
+
+	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+		r = openkey_kdf(ctx->p.master_key, sizeof(ctx->p.master_key), OPENKEY_BASE_AID + slot, 0x00, cd->uid, cd->uid_length,
+				cd->app[slot].app_master_key, sizeof(cd->app[slot].app_master_key));
+		if(r  < 0 )
+			DO_ABORT(-8);
+	}
+
+	/* 3rd generate the UUIDs and transport keys */
+	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+		uuid_generate(cd->app[slot].app_uuid);
+		gcry_randomize(cd->app[slot].app_transport_authentication_key, sizeof(cd->app[slot].app_transport_authentication_key), GCRY_STRONG_RANDOM);
+		gcry_randomize(cd->app[slot].app_transport_read_key, sizeof(cd->app[slot].app_transport_read_key), GCRY_STRONG_RANDOM);
+	}
+
+	/* 4th write the card */
+	/* 5th write the transport key files */
+
+abort:
+	memset(&version_info, 0, sizeof(version_info));
+	if(cd != NULL) {
+		if(cd->card_name != NULL) {
+			free(cd->card_name);
+		}
+		memset(cd, 0, sizeof(*cd));
+		gcry_free(cd);
+	}
+	mifare_desfire_disconnect(tag);
+
+	return retval;
 }

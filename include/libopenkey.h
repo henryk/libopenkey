@@ -12,6 +12,8 @@ enum openkey_role {
 
 typedef struct openkey_context *openkey_context_t;
 
+#define OPENKEY_BASE_AID 0xff77f0
+
 extern openkey_context_t openkey_init();
 
 extern int openkey_role_add(openkey_context_t ctx, enum openkey_role role, const char *private_base_path);
@@ -30,5 +32,9 @@ extern int openkey_authenticator_prepare(openkey_context_t ctx);
 extern int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id);
 
 extern int openkey_fini(openkey_context_t ctx);
+
+extern int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
+		const uint8_t *data, size_t data_length,
+		uint8_t *derived_key, size_t derived_key_length);
 
 #endif
