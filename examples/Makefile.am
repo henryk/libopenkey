@@ -7,7 +7,7 @@
 # Because a.out is only a sample program we don't want it to be installed.
 # The 'noinst_' prefix indicates that the following targets are not to be
 # installed.
-noinst_PROGRAMS=run_bootstrap
+noinst_PROGRAMS=run_bootstrap make_card
 
 #######################################
 # Build information for each executable. The variable name is derived
@@ -17,10 +17,11 @@ noinst_PROGRAMS=run_bootstrap
 
 # Sources for the a.out 
 run_bootstrap_SOURCES= run_bootstrap.c
+make_card_SOURCES = make_card.c
 
 # Linker options for a.out
-run_bootstrap_LDFLAGS = $(top_srcdir)/libopenkey/libopenkey.la
-run_bootstrap_LDADD = $(DEPS_LIBS) $(LIBGCRYPT_LIBS)
+AM_LDFLAGS = $(top_srcdir)/libopenkey/libopenkey.la
+LDADD = $(DEPS_LIBS) $(LIBGCRYPT_LIBS)
 
 # Compiler options for a.out
-run_bootstrap_CPPFLAGS = -I$(top_srcdir)/include $(DEPS_CFLAGS)
+AM_CPPFLAGS = -I$(top_srcdir)/include $(DEPS_CFLAGS)
