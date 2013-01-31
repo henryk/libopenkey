@@ -25,7 +25,7 @@ PKG_CHECK_MODULES([DEPS], [libfreefare >= 0.3.5 uuid])
 AM_PATH_LIBGCRYPT
 
 AC_CONFIG_FILES(Makefile
-                exampleProgram/Makefile
+                examples/Makefile
                 libopenkey/Makefile
                 include/Makefile)
 AC_OUTPUT
