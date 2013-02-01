@@ -12,6 +12,9 @@
 
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key storage v1";
+static const char * const OPENKEY_TRANSPORT_MAGIC_V1 = "libopenkey transport key file v1";
+
+static const char * const PATH_SEPARATOR = "/";
 
 #define OPENKEY_INITIAL_APPLICATION_SETTINGS 0x9
 #define OPENKEY_FINAL_APPLICATION_SETTINGS 0xE0
@@ -216,7 +219,7 @@ static char *_concat_paths(const char *a, const char *b)
 		return NULL;
 	}
 
-	size_t path_length = strlen(a) + 1 + strlen(b) + 1;
+	size_t path_length = strlen(a) + strlen(PATH_SEPARATOR) + strlen(b) + 1;
 	char *path = malloc( path_length );
 	if(path == NULL) {
 		return NULL;
@@ -224,7 +227,7 @@ static char *_concat_paths(const char *a, const char *b)
 
 	path[0] = 0;
 	strncat(path, a, path_length);
-	strncat(path, "/", path_length);
+	strncat(path, PATH_SEPARATOR, path_length);
 	strncat(path, b, path_length);
 
 	return path;
@@ -696,6 +699,9 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	int retval = -1;
 	struct card_data *cd = NULL;
 	struct mifare_desfire_version_info version_info;
+	char *card_path = NULL, *app_name = NULL;
+	char *serialized_key = NULL;
+	FILE *app_file = NULL;
 	MifareDESFireAID aid = NULL;
 	MifareDESFireKey old_key = NULL, picc_master_key = NULL, old_app_key = NULL;
 	MifareDESFireKey app_master_key = NULL, app_transport_read_key = NULL, app_transport_authentication_key = NULL;
@@ -708,7 +714,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	if(cd == NULL)
 		DO_ABORT(-2)
 
-	cd->card_name = strdup(card_name);
+	cd->card_name = strdup(card_name); // TODO Sanitize
 	if(cd->card_name == NULL)
 		DO_ABORT(-3)
 
@@ -853,6 +859,66 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 
 
 	/* 5th write the transport key files */
+	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+		struct openkey_application *app = cd->app + slot;
+		char uuid_unparsed[36 + 1];
+
+		uuid_unparse_lower(app->app_uuid, uuid_unparsed);
+
+		size_t card_path_length = strlen(ctx->p.producer_path) + strlen(PATH_SEPARATOR);
+		card_path_length += cd->uid_length*2 + 1 + strlen(cd->card_name) + 1;
+		size_t app_name_length = strlen(cd->card_name) + 1 + 2 + 1;
+
+		card_path = malloc(card_path_length);
+		app_name = malloc(app_name_length);
+		if(card_path == NULL || app_name == NULL)
+			DO_ABORT(-26);
+
+		card_path[0] = 0;
+		app_name[0] = 0;
+
+		if( snprintf(card_path, card_path_length,
+				"%s%s%02X%02X%02X%02X%02X%02X%02X-%s",
+				ctx->p.producer_path, PATH_SEPARATOR,
+				cd->uid[0], cd->uid[1], cd->uid[2], cd->uid[3], cd->uid[4], cd->uid[5], cd->uid[6],
+				cd->card_name) >= card_path_length )
+			DO_ABORT(-27);
+
+		if(snprintf(app_name, app_name_length, "%s-%i",
+				cd->card_name, slot) >= app_name_length)
+			DO_ABORT(-28);
+
+		if(_ensure_directory(card_path) < 0)
+			DO_ABORT(-29);
+
+		app_file = _fopen_in_dir(card_path, app_name, "w", S_IRWXO);
+		if(app_file == NULL)
+			DO_ABORT(-30);
+
+		if(fprintf(app_file, "%s\n%s\n%s\n", OPENKEY_TRANSPORT_MAGIC_V1, cd->card_name, uuid_unparsed) < 0)
+			DO_ABORT(-31);
+
+		serialized_key = _serialize_key(app->app_transport_read_key, sizeof(app->app_transport_read_key));
+		if(fprintf(app_file, "%s\n", serialized_key) < 0)
+			DO_ABORT(-32);
+		memset(serialized_key, 0, strlen(serialized_key));
+		gcry_free(serialized_key);
+		serialized_key = NULL;
+
+		serialized_key = _serialize_key(app->app_transport_authentication_key, sizeof(app->app_transport_authentication_key));
+		if(fprintf(app_file, "%s\n", serialized_key) < 0)
+			DO_ABORT(-33);
+		memset(serialized_key, 0, strlen(serialized_key));
+		gcry_free(serialized_key);
+		serialized_key = NULL;
+
+		free(card_path); card_path = NULL;
+		free(app_name); app_name = NULL;
+		fclose(app_file); app_file = NULL;
+	}
+
+
+	/* TODO Log */
 
 	retval = 0;
 
@@ -869,6 +935,19 @@ abort:
 	}
 	if(aid != NULL) {
 		free(aid);
+	}
+	if(card_path != NULL) {
+		free(card_path);
+	}
+	if(app_name != NULL) {
+		free(app_name);
+	}
+	if(serialized_key != NULL) {
+		memset(serialized_key, 0, strlen(serialized_key));
+		gcry_free(serialized_key);
+	}
+	if(app_file != NULL) {
+		fclose(app_file);
 	}
 
 	if(old_key != NULL) {
