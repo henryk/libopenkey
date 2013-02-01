@@ -13,11 +13,15 @@
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key storage v1";
 
+#define OPENKEY_INITIAL_APPLICATION_SETTINGS 0x9
+#define OPENKEY_FINAL_APPLICATION_SETTINGS 0xE0
+
 #define SLOT_MIN 0
 #define SLOT_MAX 14
 
 #define AES_KEY_LENGTH 16
 #define AES_KEY_LINE_LENGTH  (2*(AES_KEY_LENGTH*3)) /* Includes some allowance for editing and extra spaces */
+#define MAX_KEY_LENGTH 24
 
 #define MASTER_AID 0x0
 
@@ -59,9 +63,18 @@ struct card_data {
 	uint8_t uid[10];
 	size_t uid_length;
 
+	enum desfire_authentication_type {
+		DESFIRE_AUTHENTICATION_TYPE_DES,
+		DESFIRE_AUTHENTICATION_TYPE_3DES,
+		DESFIRE_AUTHENTICATION_TYPE_AES,
+	} old_desfire_authentication_type;
+	uint8_t old_master_key[MAX_KEY_LENGTH];
+
 	uint8_t picc_master_key[AES_KEY_LENGTH];
 
-	struct {
+	struct openkey_application {
+		uint8_t old_app_key[AES_KEY_LENGTH];
+
 		uuid_t app_uuid;
 		uint8_t app_master_key[AES_KEY_LENGTH];
 		uint8_t app_transport_read_key[AES_KEY_LENGTH];
@@ -681,6 +694,9 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	int retval = -1;
 	struct card_data *cd = NULL;
 	struct mifare_desfire_version_info version_info;
+	MifareDESFireAID aid = NULL;
+	MifareDESFireKey old_key = NULL, picc_master_key = NULL, old_app_key = NULL;
+	MifareDESFireKey app_master_key = NULL, app_transport_read_key = NULL, app_transport_authentication_key = NULL;
 
 	if(ctx == NULL || tag == NULL || !ctx->p.bootstrapped) {
 		return -1;
@@ -733,9 +749,101 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	}
 
 	/* 4th write the card */
+	switch(cd->old_desfire_authentication_type) {
+	case DESFIRE_AUTHENTICATION_TYPE_DES:
+		old_key = mifare_desfire_des_key_new(cd->old_master_key);
+		break;
+	case DESFIRE_AUTHENTICATION_TYPE_3DES:
+		old_key = mifare_desfire_3des_key_new(cd->old_master_key);
+		break;
+	case DESFIRE_AUTHENTICATION_TYPE_AES:
+		old_key = mifare_desfire_aes_key_new(cd->old_master_key);
+		break;
+	}
+	if(old_key == NULL)
+		DO_ABORT(-9);
+
+	picc_master_key = mifare_desfire_aes_key_new(cd->picc_master_key);
+	if(picc_master_key == NULL)
+		DO_ABORT(-10);
+
+
+	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+		/* 4th a) create and write each application */
+		struct openkey_application *app = cd->app + slot;
+
+		old_app_key = mifare_desfire_aes_key_new(app->old_app_key);
+		app_master_key = mifare_desfire_aes_key_new(app->app_master_key);
+		app_transport_read_key = mifare_desfire_aes_key_new(app->app_transport_read_key);
+		app_transport_authentication_key = mifare_desfire_aes_key_new(app->app_transport_authentication_key);
+		if(old_app_key == NULL || app_master_key == NULL || app_transport_read_key == NULL || app_transport_authentication_key == NULL)
+			DO_ABORT(-11);
+
+		r = mifare_desfire_select_application(tag, NULL);
+		if(r < 0)
+			DO_ABORT(-12);
+
+		r = mifare_desfire_authenticate(tag, 0, old_key);
+		if(r < 0)
+			DO_ABORT(-13);
+
+		aid = mifare_desfire_aid_new(OPENKEY_BASE_AID + slot);
+		if(aid == NULL)
+			DO_ABORT(-14);
+
+		r = mifare_desfire_create_application_aes(tag, aid, OPENKEY_INITIAL_APPLICATION_SETTINGS, 3);
+		if(r < 0)
+			DO_ABORT(-15);
+
+		r = mifare_desfire_select_application(tag, aid);
+		if(r < 0)
+			DO_ABORT(-16);
+
+		free(aid); aid = NULL;
+
+		r = mifare_desfire_authenticate_aes(tag, 0, old_app_key);
+		if(r < 0)
+			DO_ABORT(-17);
+
+		r = mifare_desfire_change_key(tag, 1, app_transport_read_key, NULL);
+		if(r < 0)
+			DO_ABORT(-18);
+
+		r = mifare_desfire_change_key(tag, 2, app_transport_authentication_key, NULL);
+		if(r < 0)
+			DO_ABORT(-19);
+
+		/* TODO: Create and write file */
+
+		r = mifare_desfire_change_key(tag, 0, app_master_key, NULL);
+		if(r < 0)
+			DO_ABORT(-20);
+
+		r = mifare_desfire_authenticate_aes(tag, 0, app_master_key);
+		if(r < 0)
+			DO_ABORT(-21);
+
+		r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_APPLICATION_SETTINGS);
+		if(r < 0)
+			DO_ABORT(-22);
+
+		mifare_desfire_key_free(old_app_key); old_app_key = NULL;
+		mifare_desfire_key_free(app_master_key); app_master_key = NULL;
+		mifare_desfire_key_free(app_transport_read_key); app_transport_read_key = NULL;
+		mifare_desfire_key_free(app_transport_authentication_key); app_transport_authentication_key = NULL;
+
+	}
+
+	/* TODO: Change master key and PICC settings */
+
+
 	/* 5th write the transport key files */
 
+	retval = 0;
+
 abort:
+	mifare_desfire_disconnect(tag);
+
 	memset(&version_info, 0, sizeof(version_info));
 	if(cd != NULL) {
 		if(cd->card_name != NULL) {
@@ -744,7 +852,29 @@ abort:
 		memset(cd, 0, sizeof(*cd));
 		gcry_free(cd);
 	}
-	mifare_desfire_disconnect(tag);
+	if(aid != NULL) {
+		free(aid);
+	}
+
+	if(old_key != NULL) {
+		mifare_desfire_key_free(old_key);
+	}
+	if(picc_master_key != NULL) {
+		mifare_desfire_key_free(picc_master_key);
+	}
+	if(old_app_key != NULL) {
+		mifare_desfire_key_free(old_app_key);
+	}
+
+	if(app_master_key != NULL) {
+		mifare_desfire_key_free(app_master_key);
+	}
+	if(app_transport_read_key != NULL) {
+		mifare_desfire_key_free(app_transport_read_key);
+	}
+	if(app_transport_authentication_key != NULL) {
+		mifare_desfire_key_free(app_transport_authentication_key);
+	}
 
 	return retval;
 }
