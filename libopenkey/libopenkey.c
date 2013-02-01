@@ -15,6 +15,8 @@ static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key st
 
 #define OPENKEY_INITIAL_APPLICATION_SETTINGS 0x9
 #define OPENKEY_FINAL_APPLICATION_SETTINGS 0xE0
+#define OPENKEY_INITIAL_FILE_SETTINGS 0x0000
+#define OPENKEY_FINAL_FILE_SETTINGS 0x1FFF
 
 #define SLOT_MIN 0
 #define SLOT_MAX 14
@@ -771,6 +773,9 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
 		/* 4th a) create and write each application */
 		struct openkey_application *app = cd->app + slot;
+		char uuid_unparsed[36 + 1];
+
+		uuid_unparse_lower(app->app_uuid, uuid_unparsed);
 
 		old_app_key = mifare_desfire_aes_key_new(app->old_app_key);
 		app_master_key = mifare_desfire_aes_key_new(app->app_master_key);
@@ -813,19 +818,29 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		if(r < 0)
 			DO_ABORT(-19);
 
-		/* TODO: Create and write file */
-
-		r = mifare_desfire_change_key(tag, 0, app_master_key, NULL);
+		r = mifare_desfire_create_std_data_file(tag, 1, MDCM_PLAIN, OPENKEY_INITIAL_FILE_SETTINGS, sizeof(uuid_unparsed)-1);
 		if(r < 0)
 			DO_ABORT(-20);
 
-		r = mifare_desfire_authenticate_aes(tag, 0, app_master_key);
+		r = mifare_desfire_write_data_ex(tag, 1, 0, sizeof(uuid_unparsed)-1, uuid_unparsed, MDCM_PLAIN);
 		if(r < 0)
 			DO_ABORT(-21);
 
-		r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_APPLICATION_SETTINGS);
+		r = mifare_desfire_change_file_settings(tag, 1, MDCM_ENCIPHERED, OPENKEY_FINAL_FILE_SETTINGS);
 		if(r < 0)
 			DO_ABORT(-22);
+
+		r = mifare_desfire_change_key(tag, 0, app_master_key, NULL);
+		if(r < 0)
+			DO_ABORT(-23);
+
+		r = mifare_desfire_authenticate_aes(tag, 0, app_master_key);
+		if(r < 0)
+			DO_ABORT(-24);
+
+		r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_APPLICATION_SETTINGS);
+		if(r < 0)
+			DO_ABORT(-25);
 
 		mifare_desfire_key_free(old_app_key); old_app_key = NULL;
 		mifare_desfire_key_free(app_master_key); app_master_key = NULL;
@@ -834,7 +849,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 
 	}
 
-	/* TODO: Change master key and PICC settings */
+	/* 4th b) Change master key and PICC settings TODO */
 
 
 	/* 5th write the transport key files */
