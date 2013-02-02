@@ -21,6 +21,9 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
  * libuuid - For handling and generation of Universally Unique IDentifiers.
  * libfreefare >= 0.3.5 - For the actual DESfire communication.
  * libnfc >= 1.7.0-rc3 - For contactless card communication (also required by libfreefare).
+ * autotools and libtool - For automatic configuration and makefiles
+ * A libnfc supported reader
+ * DESfire EV1 cards
 
 ## Installation
     git clone https://github.com/henryk/libopenkey.git
