@@ -19,6 +19,7 @@ libtool
 ltmain.sh
 missing
 stamp-h1
+compile
 examples/authenticate_card
 examples/make_card
 examples/own_card

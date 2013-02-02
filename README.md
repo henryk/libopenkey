@@ -1,6 +1,6 @@
 # libopenkey - Open framework to use DESfire cards as secure pseudonymous authentication tokens.
 
-This library provides a framework to use NXP DESfire EV1 cards as authentication tokens, e.g. for opening a door with a security level that equals or exceeds all similar existing systems and some unique anonymity/pseudonymity functions.
+This library provides a framework to use NXP DESfire EV1 cards as authentication tokens, e.g. for opening a door, with a security level that equals or exceeds all similar existing systems and some unique anonymity/pseudonymity functions.
 
 ## Features
 <dl>
@@ -39,13 +39,19 @@ The card authenticator receives the master keys from the lock manager and uses t
 
 ### Simple home use: One entity does everything
 Initialize an empty card with 
+
     FIXME command
+
 which will create a subdirectory with a name that includes the card UID and the given card name (e.g. 04654CEA641E80-my_card). In this directory there will be one file for each slot (e.g. my_card-0 through my_card-14).
 
 Using a slot transport key file (e.g. 04654CEA641E80-my_card/my_card-0) associate the card with your authenticator with
+
     FIXME command
+
 which will copy the transport key file into a subdirectory named cards into a file named for the slot UUID (e.g. b8bc2410-19f4-4547-b86e-a1317d89c88a).
 
 Now when you run the authenticator in stdout mode
+
     FIXME command
+
 it will print the slot UUID any time that you present the card.
