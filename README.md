@@ -13,7 +13,7 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
   <dt>Full anonymity on the radio channel</dt>
   <dd>No card identifying information is transmitted unencrypted on the radio channel after card initialization time.</dd>
   <dt>Optional pseudonymity for authentication</dt>
-  <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith *can* read the card unique identifier.)</dd>
+  <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith <em>can</em> read the card unique identifier.)</dd>
 </dl>
 
 ## Requirements
@@ -40,7 +40,7 @@ The card producer initializes an empty DESfire EV1 card to be used with the libo
 ### Lock manager
 The lock manager handles key management for one lock domain (e.g. one or multiple locks with the same key) and, when provided with the transport key file, can take possession of one slot on an initialized card.
  
-## Card authenticator
+### Card authenticator
 The card authenticator receives the master keys from the lock manager and uses them to authenticate cards. Authentication will yield two results: Proof that a slot on the card was previously associated with this lock domain through the lock manager, and a card/slot specific authenticated UUID that can be used for further actions (e.g. compared to a blacklist).
 
 ## Use cases
