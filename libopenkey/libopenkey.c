@@ -497,6 +497,15 @@ abort:
 	return retval;
 }
 
+int openkey_producer_is_bootstrapped(openkey_context_t ctx)
+{
+	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_CARD_PRODUCER))) {
+		return 0;
+	}
+
+	return ctx->p.bootstrapped;
+}
+
 int openkey_producer_bootstrap(openkey_context_t ctx)
 {
 	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_CARD_PRODUCER))) {
@@ -547,6 +556,15 @@ abort:
 	}
 
 	return retval;
+}
+
+int openkey_manager_is_bootstrapped(openkey_context_t ctx)
+{
+	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER))) {
+		return 0;
+	}
+
+	return ctx->m.bootstrapped;
 }
 
 int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
