@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
-#include "libopenkey.h"
+#include "openkey.h"
 
 #include <stdio.h>
 #include <stdlib.h>

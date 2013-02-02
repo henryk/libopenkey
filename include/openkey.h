@@ -16,8 +16,8 @@
  */
 
 
-#ifndef libopenkey_H
-#define libopenkey_H
+#ifndef OPENKEY_H
+#define OPENKEY_H
 
 #include <stdint.h>
 #include <freefare.h>

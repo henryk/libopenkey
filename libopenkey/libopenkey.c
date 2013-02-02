@@ -16,7 +16,7 @@
  */
 
 
-#include "libopenkey.h"
+#include "openkey.h"
 
 #include <stdlib.h>
 #include <string.h>
