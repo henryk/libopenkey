@@ -1,16 +1,18 @@
-/*
- ============================================================================
- Name        : exampleProgram.c
- Author      : Henryk Plötz
- Version     :
- Copyright   : (c) 2013 Henryk Plötz
- Description : Uses shared library to print greeting
-               To run the resulting executable the LD_LIBRARY_PATH must be
-               set to ${project_loc}/libopenkey/.libs
-               Alternatively, libtool creates a wrapper shell script in the
-               build directory of this program which can be used to run it.
-               Here the script will be called exampleProgram.
- ============================================================================
+/*-
+ * Copyright (C) 2013, Henryk Plötz
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
 #include "libopenkey.h"
