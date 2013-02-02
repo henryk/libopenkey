@@ -559,9 +559,16 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 		return 1;
 	}
 
-	ctx->m.l.slot_list[0] = preferred_slot;
-	ctx->m.l.slot_list[1] = -1;
-	ctx->m.l.slot_list_length = 2;
+	if(preferred_slot == -1) {
+		ctx->m.l.slot_list[0] = preferred_slot;
+		ctx->m.l.slot_list_length = 1;
+	} else if(preferred_slot >= SLOT_MIN && preferred_slot <= SLOT_MAX) {
+		ctx->m.l.slot_list[0] = preferred_slot;
+		ctx->m.l.slot_list[1] = -1;
+		ctx->m.l.slot_list_length = 2;
+	} else {
+		return -1;
+	}
 
 	gcry_randomize(ctx->m.l.read_key, sizeof(ctx->m.l.read_key), GCRY_VERY_STRONG_RANDOM);
 	gcry_randomize(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key), GCRY_VERY_STRONG_RANDOM);
