@@ -1309,3 +1309,141 @@ abort:
 	}
 	return retval;
 }
+
+static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot, char **card_id)
+{
+	char uuid_buffer[UUID_STRING_LENGTH + 2*16 + 1];
+	int retval = -1;
+	uuid_t app_uuid;
+	MifareDESFireAID aid = mifare_desfire_aid_new(OPENKEY_BASE_AID + slot);
+	MifareDESFireKey read_key = NULL, authentication_key = NULL;
+	size_t derived_authentication_key_length = AES_KEY_LENGTH;
+	uint8_t *derived_authentication_key = NULL;
+
+	if(aid == NULL)
+		DO_ABORT(-1);
+
+	int r = mifare_desfire_select_application(tag, aid);
+	if(r < 0)
+		DO_ABORT(-2);
+
+	read_key = mifare_desfire_aes_key_new(ctx->a.l.read_key);
+	if(read_key == NULL)
+		DO_ABORT(-3);
+
+	r = mifare_desfire_authenticate_aes(tag, 1, read_key);
+	if(r < 0)
+		DO_ABORT(-4);
+
+	memset(uuid_buffer, 0, sizeof(uuid_buffer));
+	if( mifare_desfire_read_data_ex(tag, 1, 0, UUID_STRING_LENGTH, uuid_buffer, MDCM_ENCIPHERED) != UUID_STRING_LENGTH)
+		DO_ABORT(-5);
+
+	uuid_buffer[UUID_STRING_LENGTH] = 0;
+
+	if(uuid_parse(uuid_buffer, app_uuid) < 0)
+		DO_ABORT(-6);
+
+	derived_authentication_key = gcry_calloc_secure(1, derived_authentication_key_length);
+	if(derived_authentication_key == NULL)
+		DO_ABORT(-7);
+
+	memset(uuid_buffer, 0, sizeof(uuid_buffer));
+	uuid_unparse_lower(app_uuid, uuid_buffer);
+
+	r = openkey_kdf(ctx->a.l.master_authentication_key, sizeof(ctx->a.l.master_authentication_key),
+			mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+			derived_authentication_key, derived_authentication_key_length);
+	if(r < 0)
+		DO_ABORT(-8);
+
+	authentication_key = mifare_desfire_aes_key_new(derived_authentication_key);
+	if(authentication_key == NULL)
+		DO_ABORT(-9);
+
+	r = mifare_desfire_authenticate_aes(tag, 2, authentication_key);
+	if(r < 0)
+		DO_ABORT(-10);
+
+	if(card_id != NULL) {
+		*card_id = strdup(uuid_buffer);
+		if(*card_id == NULL)
+			DO_ABORT(-11);
+	}
+
+	retval = 0;
+
+abort:
+	memset(uuid_buffer, 0, sizeof(uuid_buffer));
+	uuid_clear(app_uuid);
+
+	if(read_key != NULL) {
+		mifare_desfire_key_free(read_key);
+	}
+	if(authentication_key != NULL) {
+		mifare_desfire_key_free(authentication_key);
+	}
+
+	if(derived_authentication_key != NULL) {
+		memset(derived_authentication_key, 0, derived_authentication_key_length);
+		gcry_free(derived_authentication_key);
+	}
+
+	if(aid != NULL) {
+		free(aid);
+	}
+
+	return retval;
+}
+
+
+int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id)
+{
+	if(ctx == NULL || tag == NULL || !ctx->a.prepared) {
+		return -1;
+	}
+
+	int r = mifare_desfire_connect(tag);
+	int retval = -2;
+	if(r < 0) {
+		goto abort;
+	}
+
+	retval = -3;
+
+	SLOT_MASK_DATA_TYPE slots_tried = 0;
+	for(int i = 0; i < ctx->a.l.slot_list_length; i++) {
+		int slot = ctx->a.l.slot_list[i];
+		if(slot == -1) {
+			for(slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+				if(slots_tried & (1<<slot)) {
+					continue;
+				}
+				slots_tried |= 1<<slot;
+
+				r = _do_authenticate_slot(ctx, tag, slot, card_id);
+				if(r >= 0) {
+					retval = r;
+					goto abort;
+				}
+			}
+		} else if(slot >= SLOT_MIN && slot <= SLOT_MAX) {
+			if(slots_tried & (1<<slot)) {
+				continue;
+			}
+			slots_tried |= 1<<slot;
+
+			r = _do_authenticate_slot(ctx, tag, slot, card_id);
+			if(r >= 0) {
+				retval = r;
+				goto abort;
+			}
+		} else {
+			continue;
+		}
+	}
+
+abort:
+	mifare_desfire_disconnect(tag);
+	return retval;
+}
