@@ -18,6 +18,7 @@ static const char * const PATH_SEPARATOR = "/";
 
 #define OPENKEY_INITIAL_APPLICATION_SETTINGS 0x9
 #define OPENKEY_FINAL_APPLICATION_SETTINGS 0xE0
+#define OPENKEY_FINAL_PICC_SETTINGS 0x08
 #define OPENKEY_INITIAL_FILE_SETTINGS 0x0000
 #define OPENKEY_FINAL_FILE_SETTINGS 0x1FFF
 
@@ -99,7 +100,6 @@ struct transport_key_data {
 openkey_context_t openkey_init()
 {
 	if(!gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
-		/* TODO: Maybe print a warning here? */
 		if(!gcry_check_version(NULL)) {
 			return NULL;
 		}
@@ -737,6 +737,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	char *card_path = NULL, *app_name = NULL;
 	char *serialized_key = NULL;
 	FILE *app_file = NULL;
+	FILE *log_file = NULL;
 	MifareDESFireAID aid = NULL;
 	MifareDESFireKey old_key = NULL, picc_master_key = NULL, old_app_key = NULL;
 	MifareDESFireKey app_master_key = NULL, app_transport_read_key = NULL, app_transport_authentication_key = NULL;
@@ -890,8 +891,30 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 
 	}
 
-	/* 4th b) Change master key and PICC settings TODO */
+	/* 4th b) Change master key and PICC settings */
+	r = mifare_desfire_select_application(tag, NULL);
+	if(r < 0)
+		DO_ABORT(-26);
 
+	r = mifare_desfire_authenticate(tag, 0, old_key);
+	if(r < 0)
+		DO_ABORT(-27);
+
+	r = mifare_desfire_change_key(tag, 0, picc_master_key, NULL);
+	if(r < 0)
+		DO_ABORT(-28);
+
+	r = mifare_desfire_authenticate_aes(tag, 0, picc_master_key);
+	if(r < 0)
+		DO_ABORT(-29);
+
+	r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_PICC_SETTINGS);
+	if(r < 0)
+		DO_ABORT(-30);
+
+	r = mifare_desfire_set_configuration(tag, 0, 1);
+	if(r < 0)
+		DO_ABORT(-31);
 
 	/* 5th write the transport key files */
 	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
@@ -907,7 +930,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		card_path = malloc(card_path_length);
 		app_name = malloc(app_name_length);
 		if(card_path == NULL || app_name == NULL)
-			DO_ABORT(-26);
+			DO_ABORT(-32);
 
 		card_path[0] = 0;
 		app_name[0] = 0;
@@ -917,32 +940,32 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 				ctx->p.producer_path, PATH_SEPARATOR,
 				cd->uid[0], cd->uid[1], cd->uid[2], cd->uid[3], cd->uid[4], cd->uid[5], cd->uid[6],
 				cd->card_name) >= card_path_length )
-			DO_ABORT(-27);
+			DO_ABORT(-33);
 
 		if(snprintf(app_name, app_name_length, "%s-%i",
 				cd->card_name, slot) >= app_name_length)
-			DO_ABORT(-28);
+			DO_ABORT(-34);
 
 		if(_ensure_directory(card_path) < 0)
-			DO_ABORT(-29);
+			DO_ABORT(-35);
 
 		app_file = _fopen_in_dir(card_path, app_name, "w", S_IRWXO);
 		if(app_file == NULL)
-			DO_ABORT(-30);
+			DO_ABORT(-36);
 
 		if(fprintf(app_file, "%s\n%s\n%s\n", OPENKEY_TRANSPORT_MAGIC_V1, cd->card_name, uuid_unparsed) < 0)
-			DO_ABORT(-31);
+			DO_ABORT(-37);
 
 		serialized_key = _serialize_key(app->app_transport_read_key, sizeof(app->app_transport_read_key));
 		if(fprintf(app_file, "%s\n", serialized_key) < 0)
-			DO_ABORT(-32);
+			DO_ABORT(-38);
 		memset(serialized_key, 0, strlen(serialized_key));
 		gcry_free(serialized_key);
 		serialized_key = NULL;
 
 		serialized_key = _serialize_key(app->app_transport_authentication_key, sizeof(app->app_transport_authentication_key));
 		if(fprintf(app_file, "%s\n", serialized_key) < 0)
-			DO_ABORT(-33);
+			DO_ABORT(-39);
 		memset(serialized_key, 0, strlen(serialized_key));
 		gcry_free(serialized_key);
 		serialized_key = NULL;
@@ -952,8 +975,21 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		fclose(app_file); app_file = NULL;
 	}
 
+	log_file = _fopen_in_dir(ctx->p.producer_path, "log", "a", 0);
+	if(log_file == NULL)
+		DO_ABORT(-40);
 
-	/* TODO Log */
+
+	char time_buf[64] = {0};
+	time_t now = time(NULL);
+	struct tm tm;
+	gmtime_r(&now, &tm);
+	strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &tm);
+	if(fprintf(log_file, "%s %02X%02X%02X%02X%02X%02X%02X %s\n",
+			time_buf,
+			cd->uid[0], cd->uid[1], cd->uid[2], cd->uid[3], cd->uid[4], cd->uid[5], cd->uid[6],
+			cd->card_name) < 0)
+		DO_ABORT(-41)
 
 	retval = 0;
 
@@ -983,6 +1019,9 @@ abort:
 	}
 	if(app_file != NULL) {
 		fclose(app_file);
+	}
+	if(log_file != NULL) {
+		fclose(log_file);
 	}
 
 	if(old_key != NULL) {

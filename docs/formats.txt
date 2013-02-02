@@ -12,7 +12,11 @@ Second line: producer master key (hexadecimal, upper case, bytes space separated
 
 === File log, updated on card creation ===
 
-In each line there are three items separated by spaces: timestamp (Posix time() return value), UID (hexadecimal, upper case, no spaces), card name (until the end of line)
+In each line there are four items separated by spaces: 
+ + date in YYYY-MM-DD format (UTC)
+ + time in HH:MM:SS (24 hour) format (UTC)
+ + UID (hexadecimal, upper case, no spaces)
+ + card name (until the end of line)
 
 === Directory <UID>-<card name>, updated on card creation ===
 
