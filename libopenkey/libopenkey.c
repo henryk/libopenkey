@@ -701,6 +701,32 @@ abort:
 	return retval;
 }
 
+static char *_sanitize_card_name(const char *card_name)
+{
+	if(card_name == NULL) {
+		return NULL;
+	}
+
+	size_t card_name_length = strlen(card_name) + 1;
+	char *result = malloc(card_name_length);
+	if(result == NULL) {
+		return NULL;
+	}
+
+	for(int i=0; i<card_name_length-1; i++) {
+		if( (card_name[i] >= 'a' && card_name[i] <= 'z')
+				|| (card_name[i] >= 'A' && card_name[i] <= 'Z')
+				|| (card_name[i] >= '0' && card_name[i] <= '9')
+				|| card_name[i] == '-' || card_name[i] == '_' ) {
+			result[i] = card_name[i];
+		} else {
+			result[i] = '_';
+		}
+	}
+	result[card_name_length - 1] = 0;
+
+	return result;
+}
 
 #define DO_ABORT(x) { retval = x; goto abort; }
 int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name)
@@ -723,7 +749,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	if(cd == NULL)
 		DO_ABORT(-2)
 
-	cd->card_name = strdup(card_name); // TODO Sanitize
+	cd->card_name = _sanitize_card_name(card_name);
 	if(cd->card_name == NULL)
 		DO_ABORT(-3)
 
@@ -1040,7 +1066,7 @@ static struct transport_key_data *_load_transport_data(const char *file)
 		goto abort;
 	}
 
-	result->card_name = strdup(buf); // TODO Sanitize
+	result->card_name = _sanitize_card_name(buf);
 	if(result->card_name == NULL) {
 		goto abort;
 	}
@@ -1209,6 +1235,93 @@ abort:
 	return retval;
 }
 
+static int _copy_transport_file(const char *base_path, struct transport_key_data *td, const char *key_file)
+{
+	char *cards_path = _concat_paths(base_path, "cards");
+	char uuid[UUID_STRING_LENGTH + 1];
+	FILE *fh_in = NULL, *fh_out = NULL;
+	int retval = -1;
+	if(cards_path == NULL) {
+		goto abort;
+	}
+
+	if(_ensure_directory(cards_path) < 0) {
+		goto abort;
+	}
+
+	memset(uuid, 0, sizeof(uuid));
+	uuid_unparse_lower(td->app_uuid, uuid);
+
+	fh_in = fopen(key_file, "r");
+	if(fh_in == NULL) {
+		goto abort;
+	}
+
+	fh_out = _fopen_in_dir(cards_path, uuid, "w", S_IRWXG | S_IRWXO);
+	if(fh_out == NULL) {
+		goto abort;
+	}
+
+	uint8_t buf[1024];
+	size_t buf_length = sizeof(buf);
+	size_t r, w;
+
+	while( (r=fread(buf, 1, buf_length, fh_in)) != 0 ) {
+		w = fwrite(buf, 1, r, fh_out);
+		if(w != r) {
+			goto abort;
+		}
+	}
+
+	if(feof(fh_in) && !ferror(fh_in) && !ferror(fh_out)) {
+		retval = 0;
+	}
+
+abort:
+	if(cards_path != NULL) {
+		free(cards_path);
+	}
+	memset(uuid, 0, sizeof(uuid));
+	if(fh_in != NULL) {
+		fclose(fh_in);
+	}
+	if(fh_out != NULL) {
+		fclose(fh_out);
+	}
+	return retval;
+}
+
+static int _delete_transport_file(const char *base_path, struct transport_key_data *td)
+{
+	char *cards_path = _concat_paths(base_path, "cards");
+	char *file_path = NULL;
+	char uuid[UUID_STRING_LENGTH + 1];
+	int retval = -1;
+	if(cards_path == NULL) {
+		goto abort;
+	}
+
+	memset(uuid, 0, sizeof(uuid));
+	uuid_unparse_lower(td->app_uuid, uuid);
+
+	file_path = _concat_paths(cards_path, uuid);
+	if(file_path == NULL) {
+		goto abort;
+	}
+
+	retval = unlink(file_path);
+
+abort:
+	if(cards_path != NULL) {
+		free(cards_path);
+	}
+	if(file_path != NULL) {
+		free(file_path);
+	}
+	memset(uuid, 0, sizeof(uuid));
+	return retval;
+}
+
 int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file)
 {
 	if(ctx == NULL || tag == NULL || !ctx->m.bootstrapped) {
@@ -1216,15 +1329,17 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 	}
 
 	int retval = -1;
-	int valid_slot = -1;
 	struct transport_key_data *td = NULL;
 
 	td = _load_transport_data(key_file);
 	if(td == NULL)
 		DO_ABORT(-2);
 
-	if(mifare_desfire_connect(tag) < 0)
+	if(_copy_transport_file(ctx->m.manager_path, td, key_file) < 0)
 		DO_ABORT(-3);
+
+	if(mifare_desfire_connect(tag) < 0)
+		DO_ABORT(-4);
 
 	if(slot == -1) {
 		SLOT_MASK_DATA_TYPE slots_tried = 0;
@@ -1241,7 +1356,6 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 				if(r >= 0) {
 					retval = r;
 					slots_tried = ~0;
-					valid_slot = slot;
 				}
 			}
 		}
@@ -1261,7 +1375,6 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 			if(r >= 0) {
 				retval = r;
 				slots_tried = ~0;
-				valid_slot = slot;
 				break;
 			}
 		}
@@ -1278,7 +1391,6 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 				if(r >= 0) {
 					retval = r;
 					slots_tried = ~0;
-					valid_slot = slot;
 					break;
 				}
 			}
@@ -1286,22 +1398,18 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 
 	} else if(slot >= SLOT_MIN && slot <= SLOT_MAX) {
 		retval = _do_own_slot(ctx, tag, slot, td);
-		if(retval >= 0) {
-			valid_slot = slot;
-		}
 	} else {
 		goto abort;
-	}
-
-	if(retval >= 0) {
-		/* TODO Copy transport key file */
-		(void)valid_slot;
 	}
 
 abort:
 	mifare_desfire_disconnect(tag);
 
 	if(td != NULL) {
+		if(retval < 0) {
+			_delete_transport_file(ctx->m.manager_path, td);
+		}
+
 		if(td->card_name != NULL)
 			free(td->card_name);
 		memset(td, 0, sizeof(*td));
