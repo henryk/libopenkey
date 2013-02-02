@@ -13,7 +13,7 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
   <dt>Full anonymity on the radio channel</dt>
   <dd>No card identifying information is transmitted unencrypted on the radio channel after card initialization time.</dd>
   <dt>Optional pseudonymity for authentication</dt>
-  <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith _can_ read the card unique identifier.)</dd>
+  <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith *can* read the card unique identifier.)</dd>
 </dl>
 
 ## Requirements
@@ -21,6 +21,14 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
  * libuuid - For handling and generation of Universally Unique IDentifiers.
  * libfreefare >= 0.3.5 - For the actual DESfire communication.
  * libnfc >= 1.7.0-rc3 - For contactless card communication (also required by libfreefare).
+
+## Installation
+    git clone https://github.com/henryk/libopenkey.git
+    cd libopenkey
+    autoreconf -vis
+    ./configure
+    make
+    make install
  
 ## Roles
  
