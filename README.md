@@ -49,17 +49,19 @@ The card authenticator receives the master keys from the lock manager and uses t
 ## Use cases
 
 ### Simple home use: One entity does everything
-Initialize an empty card with 
+In this example we'll store all secret keys and related data in a directory called openkey_secrets under the current working directory. You may change this path to something more fitting if you want to, but need to adjust all example commands accordingly.
+
+Initialize an empty card and call it "my_card" with 
+
+    openkey-producer openkey_secrets my_card
+
+which will create a subdirectory under openkey_secrets with a name that includes the card UID and the given card name (e.g. 04654CEA641E80-my_card). In this directory there will be one file for each slot (e.g. my_card-0 through my_card-14).
+
+Using a slot transport key file (e.g. openkey_secrets/04654CEA641E80-my_card/my_card-0) associate the card with your authenticator with
 
     FIXME command
 
-which will create a subdirectory with a name that includes the card UID and the given card name (e.g. 04654CEA641E80-my_card). In this directory there will be one file for each slot (e.g. my_card-0 through my_card-14).
-
-Using a slot transport key file (e.g. 04654CEA641E80-my_card/my_card-0) associate the card with your authenticator with
-
-    FIXME command
-
-which will copy the transport key file into a subdirectory named cards into a file named for the slot UUID (e.g. b8bc2410-19f4-4547-b86e-a1317d89c88a).
+which will copy the transport key file into a subdirectory under openkey_secrets named cards into a file named for the slot UUID (e.g. b8bc2410-19f4-4547-b86e-a1317d89c88a).
 
 Now when you run the authenticator in stdout mode
 
