@@ -70,7 +70,7 @@ Now when you run the authenticator in stdout mode
 it will print the slot UUID any time that you present the card.
 
 ### Complex multi-party case
-In this example we'll have one user Alice who want to use the system at her home, at her hacker space (administrated by Jane) and her workplace (administrated by John). We'll also assume that Alice doesn't use the same computer to create cards and verify cards at the door, which we guess to be the default case with larger installations (such as hacker spaces and work places) as well.
+In this example we'll have one user Alice who want to use the system at her home, at her hacker space (administrated by Jane) and her workplace (administrated by John). We'll also assume that Alice doesn't use the same computer to create cards and to verify cards at the door, which we guess to be the default case with larger installations (such as hacker spaces and work places) as well.
 
 #### Alice's preparation
 Alice uses her initialization and managing computer to initialize a card and associate it with her lock domain (we'll use wildcards for the UID, because it's not really important):
@@ -78,7 +78,7 @@ Alice uses her initialization and managing computer to initialize a card and ass
     openkey-producer alices_home_secrets Alices_card
     openkey-manager alices_home_secrets alices_home_secrets/*-Alices_card/Alices_card-0
 
-this will initialize the card and associate it with Alice's newly created lock domain. Alice then copies the file alices_home_secrets/lock to her door lock computer which is the only file the door lock needs to authenticate cards.
+this will initialize the card and associate it with Alice's newly created lock domain. Alice then copies the file alices_home_secrets/lock to her door lock computer which is the only file the door lock needs in order to authenticate cards.
 
 #### Jane's preparation
 It is recommended that any lock domain except home use choose a default slot number different from 0. Jane is a bit of an Illuminatus! fan and chooses five. She then bootstraps only her lock manager, since she doesn't want to initialize any cards:
@@ -106,7 +106,7 @@ The process with John is just the same, except now Alice transmits and John uses
 
     openkey-manager workplace_secrets Alices_card-7
 
-after this slot seven on Alice's card is associated with John's lock domain.
+after this command slot seven on Alice's card is associated with John's lock domain.
 
 #### Happy end
-Alice can now use her card at home (with slot 0), at her hacker space (with slot 5) and in her work place (with slot 7). Since no identifying information about a lock domain is stored on the card in the process, Alice's employer can not find out from the card to which hacker space Alice goes. Also thief/dishonest finder who happens upon the card has no way of knowing on which locks it will be of use.
+Alice can now use her card at home (with slot 0), at her hacker space (with slot 5) and in her work place (with slot 7). Since no identifying information about a lock domain is stored on the card in the process, Alice's employer can not find out from the card to which hacker space Alice goes. Also a thief/dishonest finder who happens upon the card has no way of knowing on which locks it will be of use.
