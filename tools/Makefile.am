@@ -1,6 +1,7 @@
-bin_PROGRAMS=openkey-producer
+bin_PROGRAMS=openkey-producer openkey-manager
 
 openkey_producer_SOURCES= openkey-producer.c helpers.c
+openkey_manager_SOURCES= openkey-manager.c helpers.c
 
 AM_LDFLAGS = $(top_srcdir)/libopenkey/libopenkey.la
 LDADD = $(DEPS_LIBS)

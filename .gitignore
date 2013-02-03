@@ -25,3 +25,4 @@ examples/make_card
 examples/own_card
 examples/run_bootstrap
 tools/openkey-producer
+tools/openkey-manager
