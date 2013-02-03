@@ -65,6 +65,6 @@ which will copy the transport key file into a subdirectory under openkey_secrets
 
 Now when you run the authenticator in stdout mode
 
-    openkey-authenticator
+    openkey-authenticator openkey_secrets
 
 it will print the slot UUID any time that you present the card.
