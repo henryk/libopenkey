@@ -68,3 +68,45 @@ Now when you run the authenticator in stdout mode
     openkey-authenticator openkey_secrets
 
 it will print the slot UUID any time that you present the card.
+
+### Complex multi-party case
+In this example we'll have one user Alice who want to use the system at her home, at her hacker space (administrated by Jane) and her workplace (administrated by John). We'll also assume that Alice doesn't use the same computer to create cards and verify cards at the door, which we guess to be the default case with larger installations (such as hacker spaces and work places) as well.
+
+#### Alice's preparation
+Alice uses her initialization and managing computer to initialize a card and associate it with her lock domain (we'll use wildcards for the UID, because it's not really important):
+
+    openkey-producer alices_home_secrets Alices_card
+    openkey-manager alices_home_secrets alices_home_secrets/*-Alices_card/Alices_card-0
+
+this will initialize the card and associate it with Alice's newly created lock domain. Alice then copies the file alices_home_secrets/lock to her door lock computer which is the only file the door lock needs to authenticate cards.
+
+#### Jane's preparation
+It is recommended that any lock domain except home use choose a default slot number different from 0. Jane is a bit of an Illuminatus! fan and chooses five. She then bootstraps only her lock manager, since she doesn't want to initialize any cards:
+
+    openkey-manager -b -s 5 hackspace_secrets
+
+which will create a new file hackspace_secrets/lock that Jane needs to distribute to all locks under her control. Jane also needs to communicate "We're using slot five, so when you want to associate your card, preferably bring the transport key file for slot five" to Alice.
+
+#### John's preparation
+John arbitrarily chooses seven as the slot number for his company. He initializes his lock domain with:
+
+    openkey-manager -b -s 7 workplace_secrets
+
+and also transfers the workplace_secrets/lock file to his locks and communicates the slot number to Alice.
+
+#### Alice's association with Jane
+In order for her card to be incorporated into the system Alice transmits the alices_home_secrets/*-Alices_card/Alices_card-5 transport key file to Jane (for example on an USB stick, or through encrypted mail). Alice then visits Jane and puts her card on Jane's card reader. Jane commands:
+
+    openkey-manager hackspace_secrets Alices_card-5
+
+after which slot five on Alice's card is associated with Jane's lock domain. This creates a copy of the transport key file in the hackspace_secrets secrets directory with a file name equally the slot UUID, so that Jane can see which cards she previously associated with her domain.
+
+#### Alice's association with John
+The process with John is just the same, except now Alice transmits and John uses the Alices_card-7 file:
+
+    openkey-manager workplace_secrets Alices_card-7
+
+after this slot seven on Alice's card is associated with John's lock domain.
+
+#### Happy end
+Alice can now use her card at home (with slot 0), at her hacker space (with slot 5) and in her work place (with slot 7). Since no identifying information about a lock domain is stored on the card in the process, Alice's employer can not find out from the card to which hacker space Alice goes. Also thief/dishonest finder who happens upon the card has no way of knowing on which locks it will be of use.
