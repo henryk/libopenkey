@@ -26,3 +26,4 @@ examples/own_card
 examples/run_bootstrap
 tools/openkey-producer
 tools/openkey-manager
+tools/openkey-authenticator
