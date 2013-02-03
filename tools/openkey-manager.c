@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 			bool confirm = 0;
 
 			if(!no_confirmation) {
-				printf(": Associate this card with this lock domain? (y/n) ");
+				printf(": Try to associate this card with this lock domain? (y/n) ");
 				confirm = helpers_confirm();
 			} else {
 				printf(". ");

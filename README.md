@@ -59,12 +59,12 @@ which will create a subdirectory under openkey_secrets with a name that includes
 
 Using a slot transport key file (e.g. openkey_secrets/04654CEA641E80-my_card/my_card-0) associate the card with your authenticator with
 
-    FIXME command
+    openkey-manager openkey_secrets openkey_secrets/04654CEA641E80-my_card/my_card-0
 
 which will copy the transport key file into a subdirectory under openkey_secrets named cards into a file named for the slot UUID (e.g. b8bc2410-19f4-4547-b86e-a1317d89c88a).
 
 Now when you run the authenticator in stdout mode
 
-    FIXME command
+    openkey-authenticator
 
 it will print the slot UUID any time that you present the card.
