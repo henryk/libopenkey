@@ -23,7 +23,7 @@ authenticate_card_SOURCES = authenticate_card.c
 
 # Linker options for a.out
 AM_LDFLAGS = $(top_srcdir)/libopenkey/libopenkey.la
-LDADD = $(DEPS_LIBS) $(LIBGCRYPT_LIBS)
+LDADD = $(DEPS_LIBS)
 
 # Compiler options for a.out
 AM_CPPFLAGS = -I$(top_srcdir)/include $(DEPS_CFLAGS)
