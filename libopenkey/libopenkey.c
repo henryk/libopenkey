@@ -515,7 +515,7 @@ abort:
 	return retval;
 }
 
-int openkey_producer_is_bootstrapped(openkey_context_t ctx)
+bool openkey_producer_is_bootstrapped(openkey_context_t ctx)
 {
 	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_CARD_PRODUCER))) {
 		return 0;
@@ -576,7 +576,7 @@ abort:
 	return retval;
 }
 
-int openkey_manager_is_bootstrapped(openkey_context_t ctx)
+bool openkey_manager_is_bootstrapped(openkey_context_t ctx)
 {
 	if(ctx == NULL || !(ctx->roles_initialized & ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER))) {
 		return 0;

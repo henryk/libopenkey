@@ -36,11 +36,11 @@ extern openkey_context_t openkey_init();
 
 extern int openkey_role_add(openkey_context_t ctx, enum openkey_role role, const char *private_base_path);
 
-extern int openkey_producer_is_bootstrapped(openkey_context_t ctx);
+extern bool openkey_producer_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_producer_bootstrap(openkey_context_t ctx);
 extern int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name);
 
-extern int openkey_manager_is_bootstrapped(openkey_context_t ctx);
+extern bool openkey_manager_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot);
 extern int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file);
 #if 0
