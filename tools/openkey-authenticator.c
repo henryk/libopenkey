@@ -80,6 +80,9 @@ int main(int argc, char **argv)
 	while(1) {
 		if(helpers_first_tag(NULL, &tag) > 0) {
 			do {
+				if(freefare_get_tag_type(tag) != DESFIRE) {
+					continue;
+				}
 
 				char *card_id = NULL;
 

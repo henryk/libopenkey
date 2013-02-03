@@ -129,6 +129,10 @@ int main(int argc, char **argv)
 
 	if(helpers_first_tag(NULL, &tag) > 0) {
 		do {
+			if(freefare_get_tag_type(tag) != DESFIRE) {
+				continue;
+			}
+
 			char *tag_uid = freefare_get_tag_uid(tag);
 			const char *tag_name = freefare_get_tag_friendly_name(tag);
 
