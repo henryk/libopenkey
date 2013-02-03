@@ -22,6 +22,9 @@
 #include <stdint.h>
 #include <freefare.h>
 
+#define OPENKEY_SLOT_MIN 0
+#define OPENKEY_SLOT_MAX 14
+
 enum openkey_role {
 	OPENKEY_ROLE_CARD_PRODUCER = 0,
 	OPENKEY_ROLE_LOCK_MANAGER = 1,

@@ -40,8 +40,6 @@ static const char * const PATH_SEPARATOR = "/";
 #define OPENKEY_INITIAL_FILE_SETTINGS 0x0000
 #define OPENKEY_FINAL_FILE_SETTINGS 0x1FFF
 
-#define SLOT_MIN 0
-#define SLOT_MAX 14
 #define SLOT_MASK_DATA_TYPE uint16_t
 
 #define AES_KEY_LENGTH 16
@@ -410,7 +408,7 @@ static int _load_lock_data(struct lock_data *ld, const char *path)
 				break;
 			}
 
-			if(value != -1 && (value < SLOT_MIN || value > SLOT_MAX)) {
+			if(value != -1 && (value < OPENKEY_SLOT_MIN || value > OPENKEY_SLOT_MAX)) {
 				goto abort;
 			}
 
@@ -598,7 +596,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 	if(preferred_slot == -1) {
 		ctx->m.l.slot_list[0] = preferred_slot;
 		ctx->m.l.slot_list_length = 1;
-	} else if(preferred_slot >= SLOT_MIN && preferred_slot <= SLOT_MAX) {
+	} else if(preferred_slot >= OPENKEY_SLOT_MIN && preferred_slot <= OPENKEY_SLOT_MAX) {
 		ctx->m.l.slot_list[0] = preferred_slot;
 		ctx->m.l.slot_list[1] = -1;
 		ctx->m.l.slot_list_length = 2;
@@ -821,7 +819,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	if(r  < 0 )
 		DO_ABORT(-7);
 
-	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 		r = openkey_kdf(ctx->p.master_key, sizeof(ctx->p.master_key), OPENKEY_BASE_AID + slot, 0x00, cd->uid, cd->uid_length,
 				cd->app[slot].app_master_key, sizeof(cd->app[slot].app_master_key));
 		if(r  < 0 )
@@ -829,7 +827,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	}
 
 	/* 3rd generate the UUIDs and transport keys */
-	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 		uuid_generate(cd->app[slot].app_uuid);
 		gcry_randomize(cd->app[slot].app_transport_authentication_key, sizeof(cd->app[slot].app_transport_authentication_key), GCRY_STRONG_RANDOM);
 		gcry_randomize(cd->app[slot].app_transport_read_key, sizeof(cd->app[slot].app_transport_read_key), GCRY_STRONG_RANDOM);
@@ -855,7 +853,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		DO_ABORT(-10);
 
 
-	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 		/* 4th a) create and write each application */
 		struct openkey_application *app = cd->app + slot;
 		char uuid_unparsed[36 + 1];
@@ -960,7 +958,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		DO_ABORT(-31);
 
 	/* 5th write the transport key files */
-	for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 		struct openkey_application *app = cd->app + slot;
 		char uuid_unparsed[36 + 1];
 
@@ -1463,7 +1461,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 
 		/* 3rd: If applicable, try the remaining slots */
 		if(ctx->m.l.slot_list_length > 0 && ctx->m.l.slot_list[ctx->m.l.slot_list_length-1] == -1) {
-			for(int slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+			for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 				if(slots_tried & (1<<slot)) {
 					continue;
 				}
@@ -1478,7 +1476,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 			}
 		}
 
-	} else if(slot >= SLOT_MIN && slot <= SLOT_MAX) {
+	} else if(slot >= OPENKEY_SLOT_MIN && slot <= OPENKEY_SLOT_MAX) {
 		retval = _do_own_slot(ctx, tag, slot, td);
 	} else {
 		goto abort;
@@ -1605,7 +1603,7 @@ int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag
 	for(int i = 0; i < ctx->a.l.slot_list_length; i++) {
 		int slot = ctx->a.l.slot_list[i];
 		if(slot == -1) {
-			for(slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+			for(slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 				if(slots_tried & (1<<slot)) {
 					continue;
 				}
@@ -1617,7 +1615,7 @@ int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag
 					goto abort;
 				}
 			}
-		} else if(slot >= SLOT_MIN && slot <= SLOT_MAX) {
+		} else if(slot >= OPENKEY_SLOT_MIN && slot <= OPENKEY_SLOT_MAX) {
 			if(slots_tried & (1<<slot)) {
 				continue;
 			}
