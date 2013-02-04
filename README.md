@@ -16,6 +16,9 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
   <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith <em>can</em> read the card unique identifier.)</dd>
 </dl>
 
+**Note**: Sadly, the NXP DESfire EV1 functional specification and documentation are subject to a non disclosure agreement (NDA). However, no DESfire operation in this framework is handled by the framework itself, all operations are done with functionality or documentation from libfreefare. It is the author's opinion that, given the prior publication of libfreefare and accompanying documentation, the publication of libopenkey does not violate the DESfire NDA.
+Is is also for this reason that libopenkey does not use the NXP SAM AV1 or AV2 standard key derivation mechanisms: They are not included in libfreefare and to the best of the author's knowledge still fall under the NDA. Instead, libopenkey uses a custom, simple HMAC-SHA256 based construction.
+
 ## Requirements
  * libgcrypt - For cryptographic operations and random numbers.
  * libuuid - For handling and generation of Universally Unique IDentifiers.
