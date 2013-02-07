@@ -28,9 +28,17 @@
 #include <gcrypt.h>
 #include <uuid/uuid.h>
 
+#define OPENKEY_KDF_HMAC_ALGORITHM GCRY_MD_SHA256
+#define OPENKEY_ECC_CURVE "NIST P-256"
+
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
+static const char * const OPENKEY_MANAGER_MAGIC_V1 = "libopenkey manager secret key storage v1";
 static const char * const OPENKEY_LOCK_MAGIC_V1 = "libopenkey lock secret key storage v1";
 static const char * const OPENKEY_TRANSPORT_MAGIC_V1 = "libopenkey transport key file v1";
+
+static const char * const OPENKEY_PRODUCER_FILENAME = "producer";
+static const char * const OPENKEY_MANAGER_FILENAME = "manager";
+static const char * const OPENKEY_LOCK_FILENAME = "lock";
 
 static const char * const PATH_SEPARATOR = "/";
 
@@ -63,12 +71,19 @@ struct openkey_context {
 
 	struct {
 		char *manager_path;
-		int bootstrapped;
+		struct __attribute__((packed)) {
+			unsigned int lock_bootstrapped:1;
+			unsigned int lock_needs_upgrade:1;
+			unsigned int manager_bootstrapped:1;
+		} flags;
+
+		gcry_sexp_t creation_priv_key;
 
 		struct lock_data {
 			int slot_list[16 + 1];
 			size_t slot_list_length;
 
+			gcry_sexp_t creation_pub_key;
 			uint8_t read_key[AES_KEY_LENGTH];
 			uint8_t master_authentication_key[AES_KEY_LENGTH];
 		} l;
@@ -138,6 +153,9 @@ int openkey_fini(openkey_context_t ctx)
 	if(ctx->p.producer_path != NULL) free(ctx->p.producer_path);
 	if(ctx->m.manager_path != NULL) free(ctx->m.manager_path);
 	if(ctx->a.authenticator_path != NULL) free(ctx->a.authenticator_path);
+
+	gcry_sexp_release(ctx->m.l.creation_pub_key); ctx->m.l.creation_pub_key = NULL;
+	gcry_sexp_release(ctx->m.creation_priv_key); ctx->m.creation_priv_key = NULL;
 
 	memset(ctx, 0, sizeof(*ctx));
 	gcry_free(ctx);
@@ -340,7 +358,7 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 	ctx->p.producer_path = strdup(base_path);
 
 
-	FILE *producer_store = _fopen_in_dir(ctx->p.producer_path, "producer", "r", 0);
+	FILE *producer_store = _fopen_in_dir(ctx->p.producer_path, OPENKEY_PRODUCER_FILENAME, "r", 0);
 	char *buf = NULL;
 	size_t buf_length = 0;
 	int retval = -0x11;
@@ -384,7 +402,7 @@ abort:
 
 static int _load_lock_data(struct lock_data *ld, const char *path)
 {
-	FILE *lock_store = _fopen_in_dir(path, "lock", "r", 0);
+	FILE *lock_store = _fopen_in_dir(path, OPENKEY_LOCK_FILENAME, "r", 0);
 	char *buf = NULL;
 	size_t buf_length = 0;
 	int retval = -1;
@@ -437,6 +455,14 @@ static int _load_lock_data(struct lock_data *ld, const char *path)
 			goto abort;
 		}
 
+		r = getline(&buf, &buf_length, lock_store);
+		if(r > 0) {
+			r = gcry_sexp_new(&(ld->creation_pub_key), buf, r, 1);
+			if(r) {
+				goto abort;
+			}
+		}
+
 		retval = 1;
 	} else {
 		retval = 0;
@@ -456,6 +482,7 @@ abort:
 		ld->slot_list_length = 0;
 		memset(ld->read_key, 0, sizeof(ld->read_key));
 		memset(ld->master_authentication_key, 0, sizeof(ld->master_authentication_key));
+		gcry_sexp_release(ld->creation_pub_key); ld->creation_pub_key = NULL;
 	}
 
 	return retval;
@@ -472,18 +499,58 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 
 	int r = _load_lock_data(&ctx->m.l, ctx->m.manager_path);
 	int retval = -0x11;
+	FILE *fh = NULL;
+	char *buf = NULL;
+	size_t buf_length = 0;
 
 	if(r == 1) {
-		ctx->m.bootstrapped = 1;
+		if(ctx->m.l.creation_pub_key == NULL) {
+			ctx->m.flags.lock_needs_upgrade = 1;
+		}
+		ctx->m.flags.lock_bootstrapped = 1;
 	} else if(r < 0) {
 		goto abort;
 	}
+
+	retval = -0x12;
+	fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_MANAGER_FILENAME, "r", 0);
+	if(fh != NULL) {
+		size_t r = getline(&buf, &buf_length, fh);
+
+		if( (r < 0) || (r < strlen(OPENKEY_MANAGER_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_MANAGER_MAGIC_V1)) ) {
+			goto abort;
+		}
+		if(strncmp(buf, OPENKEY_MANAGER_MAGIC_V1, strlen(OPENKEY_MANAGER_MAGIC_V1)) != 0) {
+			goto abort;
+		}
+
+		r = getline(&buf, &buf_length, fh);
+		if(r > 0) {
+			r = gcry_sexp_new(&(ctx->m.creation_priv_key), buf, r, 1);
+			if(r) {
+				goto abort;
+			}
+		}
+
+		if(gcry_pk_testkey(ctx->m.creation_priv_key)) {
+			goto abort;
+		}
+
+		ctx->m.flags.manager_bootstrapped = 1;
+	}
+
 
 	ctx->roles_initialized |= ROLEMASK(OPENKEY_ROLE_LOCK_MANAGER);
 	retval = 0;
 
 abort:
-
+	if(fh != NULL) {
+		fclose(fh);
+	}
+	if(buf != NULL) {
+		memset(buf, 0, buf_length);
+		free(buf);
+	}
 	return retval;
 }
 
@@ -536,7 +603,7 @@ int openkey_producer_bootstrap(openkey_context_t ctx)
 	FILE *fh = NULL;
 	char *serialized_key = NULL;
 	int retval = -1;
-	fh = _fopen_in_dir(ctx->p.producer_path, "producer", "w", S_IRWXG | S_IRWXO);
+	fh = _fopen_in_dir(ctx->p.producer_path, OPENKEY_PRODUCER_FILENAME, "w", S_IRWXG | S_IRWXO);
 
 	if(fh == NULL) {
 		goto abort;
@@ -567,7 +634,7 @@ abort:
 
 	if(retval < 0) {
 		memset(ctx->p.master_key, 0, sizeof(ctx->p.master_key));
-		_unlink_in_dir(ctx->p.producer_path, "producer");
+		_unlink_in_dir(ctx->p.producer_path, OPENKEY_PRODUCER_FILENAME);
 	}
 
 	return retval;
@@ -579,7 +646,7 @@ bool openkey_manager_is_bootstrapped(openkey_context_t ctx)
 		return 0;
 	}
 
-	return ctx->m.bootstrapped;
+	return ctx->m.flags.lock_bootstrapped && ctx->m.flags.manager_bootstrapped;
 }
 
 int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
@@ -588,69 +655,165 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 		return -1;
 	}
 
-	if(ctx->m.bootstrapped) {
+	if(openkey_manager_is_bootstrapped(ctx)) {
 		return 1;
 	}
 
-	if(preferred_slot == -1) {
-		ctx->m.l.slot_list[0] = preferred_slot;
-		ctx->m.l.slot_list_length = 1;
-	} else if(preferred_slot >= OPENKEY_SLOT_MIN && preferred_slot <= OPENKEY_SLOT_MAX) {
-		ctx->m.l.slot_list[0] = preferred_slot;
-		ctx->m.l.slot_list[1] = -1;
-		ctx->m.l.slot_list_length = 2;
-	} else {
-		return -1;
-	}
 
-	gcry_randomize(ctx->m.l.read_key, sizeof(ctx->m.l.read_key), GCRY_VERY_STRONG_RANDOM);
-	gcry_randomize(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key), GCRY_VERY_STRONG_RANDOM);
-
-	FILE *fh = NULL;
+	FILE *lock_fh = NULL, *manager_fh = NULL, *lock_upgrade_fh = NULL;
 	char *serialized_authentication_key = NULL, *serialized_read_key = NULL;
 	int retval = -1;
-	fh = _fopen_in_dir(ctx->m.manager_path, "lock", "w", S_IRWXG | S_IRWXO);
+	gcry_sexp_t key_spec = NULL, key_pair = NULL, q = NULL, d = NULL;
+	gcry_mpi_t q_mpi = NULL, d_mpi = NULL;
+	uint8_t *q_buf = NULL, *d_buf = NULL;
+	size_t q_buf_length = 0, d_buf_length = 0;
 
-	if(fh == NULL) {
-		goto abort;
-	}
+	if(!ctx->m.flags.manager_bootstrapped) {
+		if(ctx->m.flags.lock_bootstrapped && !ctx->m.flags.lock_needs_upgrade) {
+			/* Bootstrapping the manager private key means that either the lock must not have been bootstrapped at all
+			 * yet, or be marked for an upgrade.
+			 */
+			goto abort;
+		}
 
-	serialized_authentication_key = _serialize_key(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key));
-	if(serialized_authentication_key == NULL) {
-		goto abort;
-	}
+		int r = gcry_sexp_build(&key_spec, NULL, "(genkey (ECDSA (curve \"" OPENKEY_ECC_CURVE "\")))");
+		if(r) {
+			goto abort;
+		}
 
-	serialized_read_key = _serialize_key(ctx->m.l.read_key, sizeof(ctx->m.l.read_key));
-	if(serialized_read_key == NULL) {
-		goto abort;
-	}
+		r = gcry_pk_genkey(&key_pair, key_spec);
+		if(r) {
+			goto abort;
+		}
 
-	int written = fprintf(fh, "%s\n", OPENKEY_LOCK_MAGIC_V1);
-	if(written < strlen(OPENKEY_LOCK_MAGIC_V1) + 1) {
-		goto abort;
-	}
+		ctx->m.l.creation_pub_key = gcry_sexp_find_token(key_pair, "public-key", 0);
+		if(!ctx->m.l.creation_pub_key) {
+			goto abort;
+		}
 
-	for(int i=0; i<ctx->m.l.slot_list_length; i++) {
-		written = fprintf(fh, (i==0) ? "%i" : " %i", ctx->m.l.slot_list[i]);
+		ctx->m.creation_priv_key = gcry_sexp_find_token(key_pair, "private-key", 0);
+		if(!ctx->m.creation_priv_key) {
+			goto abort;
+		}
+
+		q = gcry_sexp_find_token(ctx->m.creation_priv_key, "q", 0);
+		d = gcry_sexp_find_token(ctx->m.creation_priv_key, "d", 0);
+		if(!q || !d) {
+			goto abort;
+		}
+
+		q_mpi = gcry_sexp_nth_mpi(q, 1, GCRYMPI_FMT_USG);
+		d_mpi = gcry_sexp_nth_mpi(d, 1, GCRYMPI_FMT_USG);
+		if(!q_mpi || !d_mpi) {
+			goto abort;
+		}
+
+		if(gcry_mpi_aprint(GCRYMPI_FMT_HEX, &q_buf, &q_buf_length, q_mpi)) {
+			goto abort;
+		}
+
+		if(gcry_mpi_aprint(GCRYMPI_FMT_HEX, &d_buf, &d_buf_length, d_mpi)) {
+			goto abort;
+		}
+
+		manager_fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_MANAGER_FILENAME, "w", S_IRWXG | S_IRWXO);
+		if(manager_fh == NULL) {
+			goto abort;
+		}
+
+		int written = fprintf(manager_fh, "%s\n", OPENKEY_MANAGER_MAGIC_V1);
+		if(written < strlen(OPENKEY_MANAGER_MAGIC_V1) + 1) {
+			goto abort;
+		}
+
+		written = fprintf(manager_fh, "(private-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) (d #%s#) ) )\n", q_buf, d_buf);
 		if(written <= 0) {
 			goto abort;
 		}
+
+		ctx->m.flags.manager_bootstrapped = 1;
 	}
 
-	written = fprintf(fh, "\n");
-	if(written != 1) {
-		goto abort;
-	}
+	if(!ctx->m.flags.lock_bootstrapped) {
+		if(preferred_slot == -1) {
+			ctx->m.l.slot_list[0] = preferred_slot;
+			ctx->m.l.slot_list_length = 1;
+		} else if(preferred_slot >= OPENKEY_SLOT_MIN && preferred_slot <= OPENKEY_SLOT_MAX) {
+			ctx->m.l.slot_list[0] = preferred_slot;
+			ctx->m.l.slot_list[1] = -1;
+			ctx->m.l.slot_list_length = 2;
+		} else {
+			return -1;
+		}
 
-	written = fprintf(fh, "%s\n%s\n", serialized_read_key, serialized_authentication_key);
-	if(written < strlen(serialized_read_key) + 1 + strlen(serialized_authentication_key) + 1) {
-		goto abort;
+		gcry_randomize(ctx->m.l.read_key, sizeof(ctx->m.l.read_key), GCRY_VERY_STRONG_RANDOM);
+		gcry_randomize(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key), GCRY_VERY_STRONG_RANDOM);
+
+		lock_fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_LOCK_FILENAME, "w", S_IRWXG | S_IRWXO);
+
+		if(lock_fh == NULL) {
+			goto abort;
+		}
+
+		serialized_authentication_key = _serialize_key(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key));
+		if(serialized_authentication_key == NULL) {
+			goto abort;
+		}
+
+		serialized_read_key = _serialize_key(ctx->m.l.read_key, sizeof(ctx->m.l.read_key));
+		if(serialized_read_key == NULL) {
+			goto abort;
+		}
+
+		int written = fprintf(lock_fh, "%s\n", OPENKEY_LOCK_MAGIC_V1);
+		if(written < strlen(OPENKEY_LOCK_MAGIC_V1) + 1) {
+			goto abort;
+		}
+
+		for(int i=0; i<ctx->m.l.slot_list_length; i++) {
+			written = fprintf(lock_fh, (i==0) ? "%i" : " %i", ctx->m.l.slot_list[i]);
+			if(written <= 0) {
+				goto abort;
+			}
+		}
+
+		written = fprintf(lock_fh, "\n");
+		if(written != 1) {
+			goto abort;
+		}
+
+		written = fprintf(lock_fh, "%s\n%s\n", serialized_read_key, serialized_authentication_key);
+		if(written < strlen(serialized_read_key) + 1 + strlen(serialized_authentication_key) + 1) {
+			goto abort;
+		}
+
+		written = fprintf(lock_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) ) )\n", q_buf);
+		if(written <= 0) {
+			goto abort;
+		}
+
+		ctx->m.flags.lock_bootstrapped = 1;
+	} else if(ctx->m.flags.lock_needs_upgrade) {
+		lock_upgrade_fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_LOCK_FILENAME, "a", S_IRWXG | S_IRWXO);
+
+		int written = fprintf(lock_upgrade_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) ) )\n", q_buf);
+		if(written <= 0) {
+			goto abort;
+		}
+
+		ctx->m.flags.lock_needs_upgrade = 0;
 	}
 
 	retval = 0;
-	ctx->m.bootstrapped = 1;
 
 abort:
+	gcry_sexp_release(key_pair);
+	gcry_sexp_release(key_spec);
+	gcry_sexp_release(q);
+	gcry_sexp_release(d);
+	gcry_mpi_release(q_mpi);
+	gcry_mpi_release(d_mpi);
+
 	if(serialized_authentication_key != NULL) {
 		memset(serialized_authentication_key, 0, strlen(serialized_authentication_key));
 		gcry_free(serialized_authentication_key);
@@ -661,18 +824,42 @@ abort:
 		gcry_free(serialized_read_key);
 	}
 
-	if(fh != NULL) {
-		fclose(fh);
+	if(q_buf != NULL) {
+		memset(q_buf, 0, q_buf_length);
+		gcry_free(q_buf);
+	}
+
+	if(d_buf != NULL) {
+		memset(d_buf, 0, d_buf_length);
+		gcry_free(d_buf);
+	}
+
+	if(lock_fh != NULL) {
+		fclose(lock_fh);
+		if(retval < 0) {
+			_unlink_in_dir(ctx->m.manager_path, OPENKEY_LOCK_FILENAME);
+		}
+	}
+
+	if(lock_upgrade_fh != NULL) {
+		fclose(lock_upgrade_fh);
+	}
+
+	if(manager_fh != NULL) {
+		fclose(manager_fh);
+		if(retval < 0) {
+			_unlink_in_dir(ctx->m.manager_path, OPENKEY_MANAGER_FILENAME);
+		}
 	}
 
 	if(retval < 0) {
 		memset(ctx->m.l.read_key, 0, sizeof(ctx->m.l.read_key));
 		memset(ctx->m.l.master_authentication_key, 0, sizeof(ctx->m.l.master_authentication_key));
-		_unlink_in_dir(ctx->m.manager_path, "lock");
+		gcry_sexp_release(ctx->m.l.creation_pub_key); ctx->m.l.creation_pub_key = NULL;
+		gcry_sexp_release(ctx->m.creation_priv_key); ctx->m.creation_priv_key = NULL;
 	}
 
 	return retval;
-
 }
 
 int openkey_authenticator_prepare(openkey_context_t ctx)
@@ -688,7 +875,6 @@ int openkey_authenticator_prepare(openkey_context_t ctx)
 	return -1;
 }
 
-#define HMAC_ALGORITHM GCRY_MD_SHA256
 int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
 		const uint8_t *data, size_t data_length,
 		uint8_t *derived_key, size_t derived_key_length)
@@ -696,7 +882,7 @@ int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t ai
 	int retval = -1;
 	gcry_md_hd_t md = NULL;
 
-	if(derived_key_length > gcry_md_get_algo_dlen(HMAC_ALGORITHM)) {
+	if(derived_key_length > gcry_md_get_algo_dlen(OPENKEY_KDF_HMAC_ALGORITHM)) {
 		goto abort;
 	}
 
@@ -708,7 +894,7 @@ int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t ai
 		goto abort;
 	}
 
-	int r = gcry_md_open(&md, HMAC_ALGORITHM, GCRY_MD_FLAG_SECURE|GCRY_MD_FLAG_HMAC);
+	int r = gcry_md_open(&md, OPENKEY_KDF_HMAC_ALGORITHM, GCRY_MD_FLAG_SECURE|GCRY_MD_FLAG_HMAC);
 	if(r) {
 		goto abort;
 	}
@@ -730,7 +916,7 @@ int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t ai
 
 	gcry_md_final(md);
 
-	memcpy(derived_key, gcry_md_read(md, HMAC_ALGORITHM), derived_key_length);
+	memcpy(derived_key, gcry_md_read(md, OPENKEY_KDF_HMAC_ALGORITHM), derived_key_length);
 
 	retval = 0;
 
@@ -1375,7 +1561,7 @@ abort:
 
 int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file)
 {
-	if(ctx == NULL || tag == NULL || !ctx->m.bootstrapped) {
+	if(ctx == NULL || tag == NULL || !openkey_manager_is_bootstrapped(ctx)) {
 		return -1;
 	}
 
