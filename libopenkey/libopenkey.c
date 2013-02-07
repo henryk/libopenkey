@@ -238,6 +238,34 @@ static int _unserialize_key(const char *input, uint8_t *output, size_t output_le
 	}
 }
 
+static int _read_key(FILE *fh, uint8_t *key, size_t key_length)
+{
+	int retval = -1;
+	size_t buf_length = AES_KEY_LINE_LENGTH;
+
+	char *buf = gcry_malloc_secure(buf_length);
+	if(buf == NULL) {
+		goto abort;
+	}
+
+	if(fgets(buf, buf_length, fh) == NULL) {
+		goto abort;
+	}
+
+	if(_unserialize_key(buf, key, key_length) < 0) {
+		goto abort;
+	}
+
+	retval = 0;
+
+abort:
+	if(buf != NULL) {
+		memset(buf, 0, buf_length);
+		gcry_free(buf);
+	}
+	return retval;
+}
+
 static char *_concat_paths(const char *a, const char *b)
 {
 	if(a == NULL || b == NULL) {
@@ -313,34 +341,21 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 
 
 	FILE *producer_store = _fopen_in_dir(ctx->p.producer_path, "producer", "r", 0);
-	char *line_buffer = NULL;
-	size_t line_buffer_length = AES_KEY_LINE_LENGTH;
+	char *buf = NULL;
+	size_t buf_length = 0;
 	int retval = -0x11;
 
 	if(producer_store != NULL) {
-		line_buffer = gcry_malloc_secure(line_buffer_length);
-		if(line_buffer == NULL) {
+		size_t r = getline(&buf, &buf_length, producer_store);
+
+		if( (r < 0) || (r < strlen(OPENKEY_PRODUCER_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_PRODUCER_MAGIC_V1)) ) {
+			goto abort;
+		}
+		if(strncmp(buf, OPENKEY_PRODUCER_MAGIC_V1, strlen(OPENKEY_PRODUCER_MAGIC_V1)) != 0) {
 			goto abort;
 		}
 
-		if(fgets(line_buffer, line_buffer_length, producer_store) == NULL) {
-			goto abort;
-		}
-
-		size_t l = strlen(line_buffer);
-		if(l != strlen(OPENKEY_PRODUCER_MAGIC_V1)+1) {
-			goto abort;
-		}
-
-		if(strncmp(OPENKEY_PRODUCER_MAGIC_V1, line_buffer, strlen(OPENKEY_PRODUCER_MAGIC_V1)) != 0) {
-			goto abort;
-		}
-
-		if(fgets(line_buffer, line_buffer_length, producer_store) == NULL) {
-			goto abort;
-		}
-
-		if(_unserialize_key(line_buffer, ctx->p.master_key, sizeof(ctx->p.master_key)) < 0) {
+		if(_read_key(producer_store, ctx->p.master_key, sizeof(ctx->p.master_key)) < 0) {
 			goto abort;
 		}
 
@@ -355,9 +370,9 @@ abort:
 		fclose(producer_store);
 	}
 
-	if(line_buffer != NULL) {
-		memset(line_buffer, 0, line_buffer_length);
-		gcry_free(line_buffer);
+	if(buf != NULL) {
+		memset(buf, 0, buf_length);
+		free(buf);
 	}
 
 	if(!ctx->p.bootstrapped) {
@@ -370,35 +385,27 @@ abort:
 static int _load_lock_data(struct lock_data *ld, const char *path)
 {
 	FILE *lock_store = _fopen_in_dir(path, "lock", "r", 0);
-	char *line_buffer = NULL;
-	size_t line_buffer_length = AES_KEY_LINE_LENGTH;
+	char *buf = NULL;
+	size_t buf_length = 0;
 	int retval = -1;
 
 	if(lock_store != NULL) {
-		line_buffer = gcry_malloc_secure(line_buffer_length);
-		if(line_buffer == NULL) {
+		size_t r = getline(&buf, &buf_length, lock_store);
+
+		if( (r < 0) || (r < strlen(OPENKEY_LOCK_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_LOCK_MAGIC_V1)) ) {
+			goto abort;
+		}
+		if(strncmp(buf, OPENKEY_LOCK_MAGIC_V1, strlen(OPENKEY_LOCK_MAGIC_V1)) != 0) {
 			goto abort;
 		}
 
-		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
-			goto abort;
-		}
-
-		size_t l = strlen(line_buffer);
-		if(l != strlen(OPENKEY_LOCK_MAGIC_V1)+1) {
-			goto abort;
-		}
-
-		if(strncmp(OPENKEY_LOCK_MAGIC_V1, line_buffer, strlen(OPENKEY_LOCK_MAGIC_V1)) != 0) {
-			goto abort;
-		}
-
-		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+		r = getline(&buf, &buf_length, lock_store);
+		if(r < 0) {
 			goto abort;
 		}
 
 		ld->slot_list_length = 0;
-		char *strtol_begin = line_buffer;
+		char *strtol_begin = buf;
 		while(ld->slot_list_length < (sizeof(ld->slot_list)/sizeof(ld->slot_list[0]))) {
 			char *strtol_end = NULL;
 
@@ -422,19 +429,11 @@ static int _load_lock_data(struct lock_data *ld, const char *path)
 			ld->slot_list_length = 1;
 		}
 
-		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
+		if(_read_key(lock_store, ld->read_key, sizeof(ld->read_key)) < 0) {
 			goto abort;
 		}
 
-		if(_unserialize_key(line_buffer, ld->read_key, sizeof(ld->read_key)) < 0) {
-			goto abort;
-		}
-
-		if(fgets(line_buffer, line_buffer_length, lock_store) == NULL) {
-			goto abort;
-		}
-
-		if(_unserialize_key(line_buffer, ld->master_authentication_key, sizeof(ld->master_authentication_key)) < 0) {
+		if(_read_key(lock_store, ld->master_authentication_key, sizeof(ld->master_authentication_key)) < 0) {
 			goto abort;
 		}
 
@@ -448,9 +447,9 @@ abort:
 		fclose(lock_store);
 	}
 
-	if(line_buffer != NULL) {
-		memset(line_buffer, 0, line_buffer_length);
-		gcry_free(line_buffer);
+	if(buf != NULL) {
+		memset(buf, 0, buf_length);
+		free(buf);
 	}
 
 	if(retval <= 0) {
@@ -1085,34 +1084,6 @@ abort:
 		mifare_desfire_key_free(app_transport_authentication_key);
 	}
 
-	return retval;
-}
-
-static int _read_key(FILE *fh, uint8_t *key, size_t key_length)
-{
-	int retval = -1;
-	size_t buf_length = AES_KEY_LINE_LENGTH;
-
-	char *buf = gcry_malloc_secure(buf_length);
-	if(buf == NULL) {
-		goto abort;
-	}
-
-	if(fgets(buf, buf_length, fh) == NULL) {
-		goto abort;
-	}
-
-	if(_unserialize_key(buf, key, key_length) < 0) {
-		goto abort;
-	}
-
-	retval = 0;
-
-abort:
-	if(buf != NULL) {
-		memset(buf, 0, buf_length);
-		gcry_free(buf);
-	}
 	return retval;
 }
 
