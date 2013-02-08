@@ -29,7 +29,8 @@
 #include <uuid/uuid.h>
 
 #define OPENKEY_KDF_HMAC_ALGORITHM GCRY_MD_SHA256
-#define OPENKEY_ECC_CURVE "NIST P-256"
+#define OPENKEY_ECDSA_HASH GCRY_MD_SHA256
+#define OPENKEY_ECDSA_CURVE "NIST P-256"
 
 static const char * const OPENKEY_PRODUCER_MAGIC_V1 = "libopenkey producer secret key storage v1";
 static const char * const OPENKEY_MANAGER_MAGIC_V1 = "libopenkey manager secret key storage v1";
@@ -676,7 +677,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 			goto abort;
 		}
 
-		int r = gcry_sexp_build(&key_spec, NULL, "(genkey (ECDSA (curve \"" OPENKEY_ECC_CURVE "\")))");
+		int r = gcry_sexp_build(&key_spec, NULL, "(genkey (ECDSA (curve \"" OPENKEY_ECDSA_CURVE "\")))");
 		if(r) {
 			goto abort;
 		}
@@ -726,7 +727,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 			goto abort;
 		}
 
-		written = fprintf(manager_fh, "(private-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) (d #%s#) ) )\n", q_buf, d_buf);
+		written = fprintf(manager_fh, "(private-key (ecdsa (curve \"" OPENKEY_ECDSA_CURVE "\") (q #%s#) (d #%s#) ) )\n", q_buf, d_buf);
 		if(written <= 0) {
 			goto abort;
 		}
@@ -787,7 +788,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 			goto abort;
 		}
 
-		written = fprintf(lock_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) ) )\n", q_buf);
+		written = fprintf(lock_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECDSA_CURVE "\") (q #%s#) ) )\n", q_buf);
 		if(written <= 0) {
 			goto abort;
 		}
@@ -796,7 +797,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 	} else if(ctx->m.flags.lock_needs_upgrade) {
 		lock_upgrade_fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_LOCK_FILENAME, "a", S_IRWXG | S_IRWXO);
 
-		int written = fprintf(lock_upgrade_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECC_CURVE "\") (q #%s#) ) )\n", q_buf);
+		int written = fprintf(lock_upgrade_fh, "(public-key (ecdsa (curve \"" OPENKEY_ECDSA_CURVE "\") (q #%s#) ) )\n", q_buf);
 		if(written <= 0) {
 			goto abort;
 		}
@@ -1367,6 +1368,8 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 	MifareDESFireKey read_key = NULL, authentication_key = NULL;
 	size_t derived_authentication_key_length = AES_KEY_LENGTH;
 	uint8_t *derived_authentication_key = NULL;
+	gcry_md_hd_t uuid_hash_md = NULL;
+	gcry_sexp_t sig_data = NULL, sig_result = NULL;
 
 	if(aid == NULL) {
 		goto abort;
@@ -1417,6 +1420,23 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 		goto abort;
 	}
 
+	if(gcry_md_open(&uuid_hash_md, OPENKEY_ECDSA_HASH, 0)) {
+		goto abort;
+	}
+
+	gcry_md_write(uuid_hash_md, uuid_buffer, UUID_STRING_LENGTH);
+
+	r = gcry_sexp_build(&sig_data, NULL, "(data (value %b ) )",
+			gcry_md_get_algo_dlen(OPENKEY_ECDSA_HASH), gcry_md_read(uuid_hash_md, OPENKEY_ECDSA_HASH) );
+	if(r) {
+		goto abort;
+	}
+
+	r = gcry_pk_sign(&sig_result, sig_data, ctx->m.creation_priv_key);
+	if(r) {
+		goto abort;
+	}
+
 	transport_authentication_key = mifare_desfire_aes_key_new(td->app_transport_authentication_key);
 	read_key = mifare_desfire_aes_key_new(ctx->m.l.read_key);
 	authentication_key = mifare_desfire_aes_key_new(derived_authentication_key);
@@ -1446,6 +1466,9 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 abort:
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_clear(app_uuid);
+	gcry_md_close(uuid_hash_md);
+	gcry_sexp_release(sig_data);
+	gcry_sexp_release(sig_result);
 
 	if(transport_read_key != NULL) {
 		mifare_desfire_key_free(transport_read_key);
