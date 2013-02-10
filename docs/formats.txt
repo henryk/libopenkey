@@ -8,7 +8,7 @@ that all three roles can coexist in one directory.
 === File producer, generated on bootstrap ===
 
 First line: Magic sequence "libopenkey producer secret key storage v1"
-Second line: producer master key (hexadecimal, upper case, bytes space separated)
+Second line: master producer key (hexadecimal, upper case, bytes space separated)
 
 === File log, updated on card creation ===
 
@@ -30,6 +30,7 @@ Second line: card name
 Third line: card app UUID (standard dash format, lower case)
 Fourth line: application transport read key (hexadecimal, upper case, bytes space separated)
 Fifth line: application transport authentication key (hexadecimal, upper case, bytes space separated)
+Sixth line: application transport authenticity update key (hexadecimal, upper case, bytes space separated)
 
 == Role Door Manager ==
 
@@ -39,6 +40,12 @@ First line: Magic sequence "libopenkey lock secret key storage v1"
 Second line: space separated list of integers indicating slots to search for an accessible card, -1 means "all remaining". Generated on bootstrap as "preferred_slot -1"
 Third line: application read key  (hexadecimal, upper case, bytes space separated)
 Fourth line: master application authentication key (hexadecimal, upper case, bytes space separated)
+Fifth line: authenticity signature public key (libgcrypt S-expression: "(public-key (ecdsa (curve ...) (q ...) ) )")
+
+=== File manager, generated on bootstrap ===
+First line: Magic sequence "libopenkey manager secret key storage v1"
+Second line: master application authenticity update key (hexadecimal, upper case, bytes space separated)
+Third line: authenticity signature private key (libgcrypt S-expression: "(private-key (ecdsa (curve ...) (q ...) (d ...) ) )")
 
 === Directory cards, updated on card owning ===
 
@@ -50,17 +57,17 @@ Imports file lock from door manager role
 
 
 = DESfire card layout =
-PICC master key is set to KDF(producer master key, "00 00 00", "00", UID), random UID enabled,
+PICC master key is set to KDF(master producer key, "00 00 00", "00", UID), random UID enabled,
 free create/delete disabled, free list disabled, configuration changeable, master key not changeable.
 
 The AIDs are based on 0xFF77F0, which is a Mifare Classic mapped AID (0xF....?), in the middle (0x7f) of an unassigned function cluster (0xF7).
 
 == App Z, AID 0xFF77FZ ==
 
-Application security is AES, 3 keys per application, configuration not changeable, master key not changeable, free create/delete disallowed, free list disallowed, change key rights set to "same key"
+Application security is AES, 4 keys per application, configuration not changeable, master key not changeable, free create/delete disallowed, free list disallowed, change key rights set to "same key"
 
 === Key 0, Application master key ===
-KDF(producer master key, AID, "00", UID)
+KDF(master producer key, AID, "00", UID)
 
 === Key 1, Application read key ===
 Before owning: application transport read key
@@ -70,10 +77,20 @@ After owning: application read key, no derivation applied
 Before owning: application transport authentication key
 After owning: KDF(master application authentication key, AID, "02", UUID)
 
+=== Key 3, Application authenticity update key ===
+Before owning: application transport authenticity update key
+After owning: KDF(master application authenticity update key, AID, "03", UUID)
+
 === File 1 ===
 
-Data file, 36 bytes, file number 1, fully enciphered communication. Read: key 1, Write: never, Read&write: Never, Change access rights: Never
-Contents: UUID (standard dash format, lower case)
+Data file, 32 bytes, file number 1, fully enciphered communication. Read: key 1, Write: never, Read&write: Never, Change access rights: Never
+Contents: UUID (mangled format: based on standard dash format, lower case, by removing all the dashes)
+   Note: This is the only place the mangled format appears. It is (de)mangled immediately before writing/after reading. All other appearances of the UUID, most notably in KDF calls and the authenticity signature, use the lowercase standard dash format.
+
+=== File 2 ===
+
+Data file: 64 bytes, file number 2, fully enciphered communication. Read: key 2, Write: never, Read&Write: Key 3, Change access rights: Key 3
+Contents: Authenticity signature: ECDSA 256-bit signature over SHA256(UUID), components r and s stored as unsigned 256 bit integers, one after the other
 
 == App 15, AID 0xFF77FF currently undefined ==
 This application is reserved and may get administrative uses?
