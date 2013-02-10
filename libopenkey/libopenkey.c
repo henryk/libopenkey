@@ -944,7 +944,8 @@ static char *_sanitize_card_name(const char *card_name)
 		if( (card_name[i] >= 'a' && card_name[i] <= 'z')
 				|| (card_name[i] >= 'A' && card_name[i] <= 'Z')
 				|| (card_name[i] >= '0' && card_name[i] <= '9')
-				|| card_name[i] == '-' || card_name[i] == '_' ) {
+				|| card_name[i] == '-' || card_name[i] == '_'
+				|| card_name[i] == ' ' ) {
 			result[i] = card_name[i];
 		} else {
 			result[i] = '_';
