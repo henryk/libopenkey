@@ -42,6 +42,10 @@ extern int openkey_role_add(openkey_context_t ctx, enum openkey_role role, const
 extern bool openkey_producer_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_producer_bootstrap(openkey_context_t ctx);
 extern int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name);
+#if 0
+/* Needs to implemented soon, necessary for card format update */
+extern int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const char *card_name, const char *old_id);
+#endif
 
 extern bool openkey_manager_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot);

@@ -46,8 +46,12 @@ static const char * const PATH_SEPARATOR = "/";
 #define OPENKEY_INITIAL_APPLICATION_SETTINGS 0x9
 #define OPENKEY_FINAL_APPLICATION_SETTINGS 0xE0
 #define OPENKEY_FINAL_PICC_SETTINGS 0x08
-#define OPENKEY_INITIAL_FILE_SETTINGS 0x0000
-#define OPENKEY_FINAL_FILE_SETTINGS 0x1FFF
+#define OPENKEY_INITIAL_UUID_FILE_SETTINGS 0x0000
+#define OPENKEY_FINAL_UUID_FILE_SETTINGS 0x1FFF
+#define OPENKEY_FINAL_AUTHENTICITY_FILE_SETTINGS 0x2F33
+#define OPENKEY_AUTHENTICITY_R_LENGTH 32
+#define OPENKEY_AUTHENTICITY_S_LENGTH 32
+#define OPENKEY_AUTHENTICITY_FILE_SIZE (OPENKEY_AUTHENTICITY_R_LENGTH+OPENKEY_AUTHENTICITY_S_LENGTH)
 
 #define SLOT_MASK_DATA_TYPE uint16_t
 
@@ -55,6 +59,7 @@ static const char * const PATH_SEPARATOR = "/";
 #define AES_KEY_LINE_LENGTH  (2*(AES_KEY_LENGTH*3)) /* Includes some allowance for editing and extra spaces */
 #define MAX_KEY_LENGTH 24
 #define UUID_STRING_LENGTH 36
+#define UUID_MANGLED_LENGTH 32
 
 #define MASTER_AID 0x0
 
@@ -79,6 +84,7 @@ struct openkey_context {
 		} flags;
 
 		gcry_sexp_t creation_priv_key;
+		uint8_t master_authenticity_update_key[AES_KEY_LENGTH];
 
 		struct lock_data {
 			int slot_list[16 + 1];
@@ -119,6 +125,7 @@ struct card_data {
 		uint8_t app_master_key[AES_KEY_LENGTH];
 		uint8_t app_transport_read_key[AES_KEY_LENGTH];
 		uint8_t app_transport_authentication_key[AES_KEY_LENGTH];
+		uint8_t app_transport_authenticity_update_key[AES_KEY_LENGTH];
 	} app[15];
 };
 
@@ -127,6 +134,7 @@ struct transport_key_data {
 	uuid_t app_uuid;
 	uint8_t app_transport_read_key[AES_KEY_LENGTH];
 	uint8_t app_transport_authentication_key[AES_KEY_LENGTH];
+	uint8_t app_transport_authenticity_update_key[AES_KEY_LENGTH];
 };
 
 openkey_context_t openkey_init()
@@ -195,6 +203,75 @@ int openkey_role_add(openkey_context_t ctx, enum openkey_role role, const char *
 	default:
 		return -3;
 	}
+}
+
+static const int UUID_PART_SIZES[] = { 8, 4, 4, 4, 12 };
+
+static int _mangle_uuid(const char *uuid, size_t uuid_length, char *mangled_uuid, size_t mangled_uuid_length)
+{
+	size_t inpos = 0, outpos = 0;
+
+	if(uuid == NULL || uuid_length == 0 ||mangled_uuid == NULL || mangled_uuid_length == 0) {
+		return -1;
+	}
+
+	for(int i=0; i< sizeof(UUID_PART_SIZES)/sizeof(UUID_PART_SIZES[0]); i++) {
+		if(i != 0) {
+			if(inpos >= uuid_length) {
+				return -1;
+			}
+			if( uuid[inpos++] != '-' ) {
+				return -1;
+			}
+		}
+		for(int j=0; j<UUID_PART_SIZES[i]; j++) {
+			if(outpos >= mangled_uuid_length || inpos >= uuid_length) {
+				return -1;
+			}
+
+			char in = uuid[inpos++];
+			if( (in >= '0' && in <= '9') || (in >= 'a' && in <= 'f') ) {
+				mangled_uuid[outpos++] = in;
+			} else {
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int _unmangle_uuid(const char *mangled_uuid, size_t mangled_uuid_length, char *uuid, size_t uuid_length)
+{
+	size_t inpos = 0, outpos = 0;
+
+	if(uuid == NULL || uuid_length == 0 || mangled_uuid == NULL || mangled_uuid_length == 0) {
+		return -1;
+	}
+
+	for(int i=0; i< sizeof(UUID_PART_SIZES)/sizeof(UUID_PART_SIZES[0]); i++) {
+		if(i != 0) {
+			if(outpos >= uuid_length) {
+				return -1;
+			}
+			uuid[outpos++] = '-';
+		}
+
+		for(int j=0; j<UUID_PART_SIZES[i]; j++) {
+			if(inpos >= mangled_uuid_length || outpos >= uuid_length) {
+				return -1;
+			}
+
+			char in = mangled_uuid[inpos++];
+			if( (in >= '0' && in <= '9') || (in >= 'a' && in <= 'f') ) {
+				uuid[outpos++] = in;
+			} else {
+				return -1;
+			}
+		}
+	}
+
+	return 0;
 }
 
 static char *_serialize_key(const uint8_t *key, size_t key_length)
@@ -525,6 +602,10 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 			goto abort;
 		}
 
+		if(_read_key(fh, ctx->m.master_authenticity_update_key, sizeof(ctx->m.master_authenticity_update_key)) < 0) {
+			goto abort;
+		}
+
 		r = getline(&buf, &buf_length, fh);
 		if(r > 0) {
 			r = gcry_sexp_new(&(ctx->m.creation_priv_key), buf, r, 1);
@@ -662,7 +743,7 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 
 
 	FILE *lock_fh = NULL, *manager_fh = NULL, *lock_upgrade_fh = NULL;
-	char *serialized_authentication_key = NULL, *serialized_read_key = NULL;
+	char *serialized_authentication_key = NULL, *serialized_read_key = NULL, *serialized_update_key = NULL;
 	int retval = -1;
 	gcry_sexp_t key_spec = NULL, key_pair = NULL, q = NULL, d = NULL;
 	gcry_mpi_t q_mpi = NULL, d_mpi = NULL;
@@ -717,6 +798,8 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 			goto abort;
 		}
 
+		gcry_randomize(ctx->m.master_authenticity_update_key, sizeof(ctx->m.master_authenticity_update_key), GCRY_VERY_STRONG_RANDOM);
+
 		manager_fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_MANAGER_FILENAME, "w", S_IRWXG | S_IRWXO);
 		if(manager_fh == NULL) {
 			goto abort;
@@ -724,6 +807,16 @@ int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot)
 
 		int written = fprintf(manager_fh, "%s\n", OPENKEY_MANAGER_MAGIC_V1);
 		if(written < strlen(OPENKEY_MANAGER_MAGIC_V1) + 1) {
+			goto abort;
+		}
+
+		serialized_update_key = _serialize_key(ctx->m.master_authenticity_update_key, sizeof(ctx->m.master_authenticity_update_key));
+		if(serialized_update_key == NULL) {
+			goto abort;
+		}
+
+		written = fprintf(manager_fh, "%s\n", serialized_update_key);
+		if(written <= 0) {
 			goto abort;
 		}
 
@@ -968,7 +1061,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	FILE *log_file = NULL;
 	MifareDESFireAID aid = NULL;
 	MifareDESFireKey old_key = NULL, picc_master_key = NULL, old_app_key = NULL;
-	MifareDESFireKey app_master_key = NULL, app_transport_read_key = NULL, app_transport_authentication_key = NULL;
+	MifareDESFireKey app_master_key = NULL, app_transport_read_key = NULL, app_transport_authentication_key = NULL, app_transport_update_key = NULL;
 
 	if(ctx == NULL || tag == NULL || !ctx->p.bootstrapped) {
 		return -1;
@@ -1018,6 +1111,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		uuid_generate(cd->app[slot].app_uuid);
 		gcry_randomize(cd->app[slot].app_transport_authentication_key, sizeof(cd->app[slot].app_transport_authentication_key), GCRY_STRONG_RANDOM);
 		gcry_randomize(cd->app[slot].app_transport_read_key, sizeof(cd->app[slot].app_transport_read_key), GCRY_STRONG_RANDOM);
+		gcry_randomize(cd->app[slot].app_transport_authenticity_update_key, sizeof(cd->app[slot].app_transport_authenticity_update_key), GCRY_STRONG_RANDOM);
 	}
 
 	/* 4th write the card */
@@ -1043,7 +1137,8 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
 		/* 4th a) create and write each application */
 		struct openkey_application *app = cd->app + slot;
-		char uuid_unparsed[36 + 1];
+		char uuid_unparsed[UUID_STRING_LENGTH + 1];
+		char uuid_mangled[UUID_MANGLED_LENGTH];
 
 		uuid_unparse_lower(app->app_uuid, uuid_unparsed);
 
@@ -1051,7 +1146,8 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		app_master_key = mifare_desfire_aes_key_new(app->app_master_key);
 		app_transport_read_key = mifare_desfire_aes_key_new(app->app_transport_read_key);
 		app_transport_authentication_key = mifare_desfire_aes_key_new(app->app_transport_authentication_key);
-		if(old_app_key == NULL || app_master_key == NULL || app_transport_read_key == NULL || app_transport_authentication_key == NULL)
+		app_transport_update_key = mifare_desfire_aes_key_new(app->app_transport_authenticity_update_key);
+		if(old_app_key == NULL || app_master_key == NULL || app_transport_read_key == NULL || app_transport_authentication_key == NULL || app_transport_update_key == NULL)
 			DO_ABORT(-11);
 
 		r = mifare_desfire_select_application(tag, NULL);
@@ -1066,7 +1162,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		if(aid == NULL)
 			DO_ABORT(-14);
 
-		r = mifare_desfire_create_application_aes(tag, aid, OPENKEY_INITIAL_APPLICATION_SETTINGS, 3);
+		r = mifare_desfire_create_application_aes(tag, aid, OPENKEY_INITIAL_APPLICATION_SETTINGS, 4);
 		if(r < 0)
 			DO_ABORT(-15);
 
@@ -1088,61 +1184,74 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		if(r < 0)
 			DO_ABORT(-19);
 
-		r = mifare_desfire_create_std_data_file(tag, 1, MDCM_PLAIN, OPENKEY_INITIAL_FILE_SETTINGS, sizeof(uuid_unparsed)-1);
+		r = mifare_desfire_change_key(tag, 3, app_transport_update_key, NULL);
 		if(r < 0)
 			DO_ABORT(-20);
 
-		r = mifare_desfire_write_data_ex(tag, 1, 0, sizeof(uuid_unparsed)-1, uuid_unparsed, MDCM_PLAIN);
+		r = mifare_desfire_create_std_data_file(tag, 1, MDCM_PLAIN, OPENKEY_INITIAL_UUID_FILE_SETTINGS, sizeof(uuid_mangled));
 		if(r < 0)
 			DO_ABORT(-21);
 
-		r = mifare_desfire_change_file_settings(tag, 1, MDCM_ENCIPHERED, OPENKEY_FINAL_FILE_SETTINGS);
-		if(r < 0)
+		if(_mangle_uuid(uuid_unparsed, sizeof(uuid_unparsed)-1, uuid_mangled, sizeof(uuid_mangled)) < 0)
 			DO_ABORT(-22);
 
-		r = mifare_desfire_change_key(tag, 0, app_master_key, NULL);
+		r = mifare_desfire_write_data_ex(tag, 1, 0, sizeof(uuid_mangled), uuid_mangled, MDCM_PLAIN);
 		if(r < 0)
 			DO_ABORT(-23);
 
-		r = mifare_desfire_authenticate_aes(tag, 0, app_master_key);
+		r = mifare_desfire_change_file_settings(tag, 1, MDCM_ENCIPHERED, OPENKEY_FINAL_UUID_FILE_SETTINGS);
 		if(r < 0)
 			DO_ABORT(-24);
 
-		r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_APPLICATION_SETTINGS);
+		r = mifare_desfire_create_std_data_file(tag, 2, MDCM_ENCIPHERED, OPENKEY_FINAL_AUTHENTICITY_FILE_SETTINGS, OPENKEY_AUTHENTICITY_FILE_SIZE);
 		if(r < 0)
 			DO_ABORT(-25);
+
+		r = mifare_desfire_change_key(tag, 0, app_master_key, NULL);
+		if(r < 0)
+			DO_ABORT(-26);
+
+		r = mifare_desfire_authenticate_aes(tag, 0, app_master_key);
+		if(r < 0)
+			DO_ABORT(-27);
+
+		r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_APPLICATION_SETTINGS);
+		if(r < 0)
+			DO_ABORT(-28);
 
 		mifare_desfire_key_free(old_app_key); old_app_key = NULL;
 		mifare_desfire_key_free(app_master_key); app_master_key = NULL;
 		mifare_desfire_key_free(app_transport_read_key); app_transport_read_key = NULL;
 		mifare_desfire_key_free(app_transport_authentication_key); app_transport_authentication_key = NULL;
+		mifare_desfire_key_free(app_transport_update_key); app_transport_update_key = NULL;
 
 	}
 
 	/* 4th b) Change master key and PICC settings */
 	r = mifare_desfire_select_application(tag, NULL);
 	if(r < 0)
-		DO_ABORT(-26);
+		DO_ABORT(-29);
 
 	r = mifare_desfire_authenticate(tag, 0, old_key);
 	if(r < 0)
-		DO_ABORT(-27);
+		DO_ABORT(-30);
 
 	r = mifare_desfire_change_key(tag, 0, picc_master_key, NULL);
 	if(r < 0)
-		DO_ABORT(-28);
+		DO_ABORT(-31);
 
 	r = mifare_desfire_authenticate_aes(tag, 0, picc_master_key);
 	if(r < 0)
-		DO_ABORT(-29);
+		DO_ABORT(-32);
 
 	r = mifare_desfire_change_key_settings(tag, OPENKEY_FINAL_PICC_SETTINGS);
 	if(r < 0)
-		DO_ABORT(-30);
+		DO_ABORT(-33);
 
 	r = mifare_desfire_set_configuration(tag, 0, 1);
 	if(r < 0)
-		DO_ABORT(-31);
+		DO_ABORT(-34);
+
 
 	/* 5th write the transport key files */
 	for(int slot = OPENKEY_SLOT_MIN; slot <= OPENKEY_SLOT_MAX; slot++) {
@@ -1158,7 +1267,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 		card_path = malloc(card_path_length);
 		app_name = malloc(app_name_length);
 		if(card_path == NULL || app_name == NULL)
-			DO_ABORT(-32);
+			DO_ABORT(-35);
 
 		card_path[0] = 0;
 		app_name[0] = 0;
@@ -1168,32 +1277,39 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 				ctx->p.producer_path, PATH_SEPARATOR,
 				cd->uid[0], cd->uid[1], cd->uid[2], cd->uid[3], cd->uid[4], cd->uid[5], cd->uid[6],
 				cd->card_name) >= card_path_length )
-			DO_ABORT(-33);
+			DO_ABORT(-36);
 
 		if(snprintf(app_name, app_name_length, "%s-%i",
 				cd->card_name, slot) >= app_name_length)
-			DO_ABORT(-34);
+			DO_ABORT(-37);
 
 		if(_ensure_directory(card_path) < 0)
-			DO_ABORT(-35);
+			DO_ABORT(-38);
 
 		app_file = _fopen_in_dir(card_path, app_name, "w", S_IRWXO);
 		if(app_file == NULL)
-			DO_ABORT(-36);
+			DO_ABORT(-39);
 
 		if(fprintf(app_file, "%s\n%s\n%s\n", OPENKEY_TRANSPORT_MAGIC_V1, cd->card_name, uuid_unparsed) < 0)
-			DO_ABORT(-37);
+			DO_ABORT(-40);
 
 		serialized_key = _serialize_key(app->app_transport_read_key, sizeof(app->app_transport_read_key));
 		if(fprintf(app_file, "%s\n", serialized_key) < 0)
-			DO_ABORT(-38);
+			DO_ABORT(-41);
 		memset(serialized_key, 0, strlen(serialized_key));
 		gcry_free(serialized_key);
 		serialized_key = NULL;
 
 		serialized_key = _serialize_key(app->app_transport_authentication_key, sizeof(app->app_transport_authentication_key));
 		if(fprintf(app_file, "%s\n", serialized_key) < 0)
-			DO_ABORT(-39);
+			DO_ABORT(-42);
+		memset(serialized_key, 0, strlen(serialized_key));
+		gcry_free(serialized_key);
+		serialized_key = NULL;
+
+		serialized_key = _serialize_key(app->app_transport_authenticity_update_key, sizeof(app->app_transport_authenticity_update_key));
+		if(fprintf(app_file, "%s\n", serialized_key) < 0)
+			DO_ABORT(-43);
 		memset(serialized_key, 0, strlen(serialized_key));
 		gcry_free(serialized_key);
 		serialized_key = NULL;
@@ -1205,7 +1321,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 
 	log_file = _fopen_in_dir(ctx->p.producer_path, "log", "a", 0);
 	if(log_file == NULL)
-		DO_ABORT(-40);
+		DO_ABORT(-44);
 
 
 	char time_buf[64] = {0};
@@ -1217,7 +1333,7 @@ int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const cha
 			time_buf,
 			cd->uid[0], cd->uid[1], cd->uid[2], cd->uid[3], cd->uid[4], cd->uid[5], cd->uid[6],
 			cd->card_name) < 0)
-		DO_ABORT(-41)
+		DO_ABORT(-45)
 
 	retval = 0;
 
@@ -1270,6 +1386,9 @@ abort:
 	}
 	if(app_transport_authentication_key != NULL) {
 		mifare_desfire_key_free(app_transport_authentication_key);
+	}
+	if(app_transport_update_key != NULL) {
+		mifare_desfire_key_free(app_transport_update_key);
 	}
 
 	return retval;
@@ -1332,6 +1451,10 @@ static struct transport_key_data *_load_transport_data(const char *file)
 		goto abort;
 	}
 
+	if( _read_key(fh, result->app_transport_authenticity_update_key, sizeof(result->app_transport_authenticity_update_key)) < 0) {
+		goto abort;
+	}
+
 	error = 0;
 
 abort:
@@ -1359,18 +1482,23 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 {
 	/* Note: As of 2013-02-02 mifare_desfire_read_ex() with cipher/mac has a bug in that it will
 	 * need a buffer that is large enough to hold both the payload data and mac/padding. So we'll
-	 * allocate a larger buffer here and use UUID_STRING_LENGTH explicitly.
+	 * allocate a larger buffer here and use UUID_MANGLED_LENGTH explicitly.
 	 */
-	char uuid_buffer[UUID_STRING_LENGTH + 2*16 + 1];
+	char uuid_mangled[UUID_MANGLED_LENGTH + 2*16 + 1];
+	char uuid_buffer[UUID_STRING_LENGTH + 1];
 	int retval = -1;
 	uuid_t app_uuid;
 	MifareDESFireAID aid = mifare_desfire_aid_new(OPENKEY_BASE_AID + slot);
-	MifareDESFireKey transport_read_key = NULL, transport_authentication_key = NULL;
-	MifareDESFireKey read_key = NULL, authentication_key = NULL;
+	MifareDESFireKey transport_read_key = NULL, transport_authentication_key = NULL, transport_update_key = NULL;
+	MifareDESFireKey read_key = NULL, authentication_key = NULL, update_key = NULL;
 	size_t derived_authentication_key_length = AES_KEY_LENGTH;
 	uint8_t *derived_authentication_key = NULL;
+	size_t derived_update_key_length = AES_KEY_LENGTH;
+	uint8_t *derived_update_key = NULL;
 	gcry_md_hd_t uuid_hash_md = NULL;
-	gcry_sexp_t sig_data = NULL, sig_result = NULL;
+	gcry_sexp_t sig_data = NULL, sig_result = NULL, r_data = NULL, s_data = NULL;
+	const char *r_buffer, *s_buffer; // Note: These are *inside* r_data and s_data, so don't need to be freed
+	size_t r_buffer_length, s_buffer_length;
 
 	if(aid == NULL) {
 		goto abort;
@@ -1391,12 +1519,19 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 		goto abort;
 	}
 
+	memset(uuid_mangled, 0, sizeof(uuid_mangled));
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
-	if( mifare_desfire_read_data_ex(tag, 1, 0, UUID_STRING_LENGTH, uuid_buffer, MDCM_ENCIPHERED) != UUID_STRING_LENGTH) {
+	if( mifare_desfire_read_data_ex(tag, 1, 0, UUID_MANGLED_LENGTH, uuid_mangled, MDCM_ENCIPHERED) != UUID_MANGLED_LENGTH) {
 		goto abort;
 	}
 
-	uuid_buffer[UUID_STRING_LENGTH] = 0;
+	if(_unmangle_uuid(uuid_mangled, sizeof(uuid_mangled), uuid_buffer, sizeof(uuid_buffer)) < 0) {
+		goto abort;
+	}
+
+	if(uuid_buffer[UUID_STRING_LENGTH] != 0) {
+		goto abort;
+	}
 
 	if(uuid_parse(uuid_buffer, app_uuid) < 0) {
 		goto abort;
@@ -1411,12 +1546,24 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 		goto abort;
 	}
 
+	derived_update_key = gcry_calloc_secure(1, derived_update_key_length);
+	if(derived_update_key == NULL) {
+		goto abort;
+	}
+
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_unparse_lower(td->app_uuid, uuid_buffer);
 
 	r = openkey_kdf(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key),
 			mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
 			derived_authentication_key, derived_authentication_key_length);
+	if(r < 0) {
+		goto abort;
+	}
+
+	r = openkey_kdf(ctx->m.master_authenticity_update_key, sizeof(ctx->m.master_authenticity_update_key),
+			mifare_desfire_aid_get_aid(aid), 3, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+			derived_update_key, derived_update_key_length);
 	if(r < 0) {
 		goto abort;
 	}
@@ -1438,11 +1585,38 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 		goto abort;
 	}
 
+	r_data = gcry_sexp_find_token(sig_result, "r", 0);
+	s_data = gcry_sexp_find_token(sig_result, "s", 0);
+	if(r_data == NULL || s_data == NULL) {
+		goto abort;
+	}
+
+	r_buffer = gcry_sexp_nth_data(r_data, 1, &r_buffer_length);
+	s_buffer = gcry_sexp_nth_data(s_data, 1, &s_buffer_length);
+	if(r_buffer == NULL || s_buffer == NULL) {
+		goto abort;
+	}
+
+	if(r_buffer_length != OPENKEY_AUTHENTICITY_R_LENGTH || s_buffer_length != OPENKEY_AUTHENTICITY_S_LENGTH) {
+		goto abort;
+	}
+
 	transport_authentication_key = mifare_desfire_aes_key_new(td->app_transport_authentication_key);
+	transport_update_key = mifare_desfire_aes_key_new(td->app_transport_authenticity_update_key);
 	read_key = mifare_desfire_aes_key_new(ctx->m.l.read_key);
 	authentication_key = mifare_desfire_aes_key_new(derived_authentication_key);
+	update_key = mifare_desfire_aes_key_new(derived_update_key);
 
-	if(transport_authentication_key == NULL || read_key == NULL || authentication_key == NULL) {
+	if(transport_authentication_key == NULL || transport_update_key == NULL
+			|| read_key == NULL || authentication_key == NULL || update_key == NULL) {
+		goto abort;
+	}
+
+	if(mifare_desfire_authenticate_aes(tag, 3, transport_update_key) < 0) {
+		goto abort;
+	}
+
+	if(mifare_desfire_change_key(tag, 3, update_key, NULL) < 0) {
 		goto abort;
 	}
 
@@ -1462,14 +1636,29 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 		goto abort;
 	}
 
+	if(mifare_desfire_authenticate_aes(tag, 3, update_key) < 0) {
+		goto abort;
+	}
+
+	if(mifare_desfire_write_data_ex(tag, 2, 0, r_buffer_length, r_buffer, MDCM_ENCIPHERED) < 0) {
+		goto abort;
+	}
+
+	if(mifare_desfire_write_data_ex(tag, 2, r_buffer_length, s_buffer_length, s_buffer, MDCM_ENCIPHERED) < 0) {
+		goto abort;
+	}
+
 	retval = 0;
 
 abort:
+	memset(uuid_mangled, 0, sizeof(uuid_mangled));
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_clear(app_uuid);
 	gcry_md_close(uuid_hash_md);
 	gcry_sexp_release(sig_data);
 	gcry_sexp_release(sig_result);
+	gcry_sexp_release(r_data);
+	gcry_sexp_release(s_data);
 
 	if(transport_read_key != NULL) {
 		mifare_desfire_key_free(transport_read_key);
@@ -1477,11 +1666,17 @@ abort:
 	if(transport_authentication_key != NULL) {
 		mifare_desfire_key_free(transport_authentication_key);
 	}
+	if(transport_update_key != NULL) {
+		mifare_desfire_key_free(transport_update_key);
+	}
 	if(read_key != NULL) {
 		mifare_desfire_key_free(read_key);
 	}
 	if(authentication_key != NULL) {
 		mifare_desfire_key_free(authentication_key);
+	}
+	if(update_key != NULL) {
+		mifare_desfire_key_free(update_key);
 	}
 
 	if(aid != NULL) {
@@ -1491,6 +1686,11 @@ abort:
 	if(derived_authentication_key != NULL) {
 		memset(derived_authentication_key, 0, derived_authentication_key_length);
 		gcry_free(derived_authentication_key);
+	}
+
+	if(derived_update_key != NULL) {
+		memset(derived_update_key, 0, derived_update_key_length);
+		gcry_free(derived_update_key);
 	}
 
 	return retval;
@@ -1681,13 +1881,17 @@ abort:
 
 static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot, char **card_id)
 {
-	char uuid_buffer[UUID_STRING_LENGTH + 2*16 + 1];
+	char uuid_mangled[UUID_MANGLED_LENGTH + 2*16 + 1];
+	char uuid_buffer[UUID_STRING_LENGTH + 1];
+	char authenticity_data[OPENKEY_AUTHENTICITY_FILE_SIZE + 2*16 + 1];
 	int retval = -1;
 	uuid_t app_uuid;
 	MifareDESFireAID aid = mifare_desfire_aid_new(OPENKEY_BASE_AID + slot);
 	MifareDESFireKey read_key = NULL, authentication_key = NULL;
 	size_t derived_authentication_key_length = AES_KEY_LENGTH;
 	uint8_t *derived_authentication_key = NULL;
+	gcry_sexp_t sig_data = NULL, sig_val = NULL;
+	gcry_md_hd_t uuid_hash_md = NULL;
 
 	if(aid == NULL)
 		DO_ABORT(-1);
@@ -1705,17 +1909,22 @@ static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot,
 		DO_ABORT(-4);
 
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
-	if( mifare_desfire_read_data_ex(tag, 1, 0, UUID_STRING_LENGTH, uuid_buffer, MDCM_ENCIPHERED) != UUID_STRING_LENGTH)
+	memset(uuid_mangled, 0, sizeof(uuid_mangled));
+	if( mifare_desfire_read_data_ex(tag, 1, 0, UUID_MANGLED_LENGTH, uuid_mangled, MDCM_ENCIPHERED) != UUID_MANGLED_LENGTH)
 		DO_ABORT(-5);
 
-	uuid_buffer[UUID_STRING_LENGTH] = 0;
+	if(_unmangle_uuid(uuid_mangled, sizeof(uuid_mangled), uuid_buffer, sizeof(uuid_buffer)) < 0)
+		DO_ABORT(-6);
+
+	if(uuid_buffer[UUID_STRING_LENGTH] != 0)
+		DO_ABORT(-7);
 
 	if(uuid_parse(uuid_buffer, app_uuid) < 0)
-		DO_ABORT(-6);
+		DO_ABORT(-8);
 
 	derived_authentication_key = gcry_calloc_secure(1, derived_authentication_key_length);
 	if(derived_authentication_key == NULL)
-		DO_ABORT(-7);
+		DO_ABORT(-9);
 
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_unparse_lower(app_uuid, uuid_buffer);
@@ -1724,26 +1933,55 @@ static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot,
 			mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
 			derived_authentication_key, derived_authentication_key_length);
 	if(r < 0)
-		DO_ABORT(-8);
+		DO_ABORT(-10);
 
 	authentication_key = mifare_desfire_aes_key_new(derived_authentication_key);
 	if(authentication_key == NULL)
-		DO_ABORT(-9);
+		DO_ABORT(-11);
 
 	r = mifare_desfire_authenticate_aes(tag, 2, authentication_key);
 	if(r < 0)
-		DO_ABORT(-10);
+		DO_ABORT(-12);
+
+	memset(authenticity_data, 0, sizeof(authenticity_data));
+	if( mifare_desfire_read_data_ex(tag, 2, 0, OPENKEY_AUTHENTICITY_FILE_SIZE, authenticity_data, MDCM_ENCIPHERED) != OPENKEY_AUTHENTICITY_FILE_SIZE)
+		DO_ABORT(-13);
+
+
+	if(gcry_md_open(&uuid_hash_md, OPENKEY_ECDSA_HASH, 0))
+		DO_ABORT(-14);
+
+	gcry_md_write(uuid_hash_md, uuid_buffer, UUID_STRING_LENGTH);
+
+	r = gcry_sexp_build(&sig_data, NULL, "(data (value %b ) )",
+			gcry_md_get_algo_dlen(OPENKEY_ECDSA_HASH), gcry_md_read(uuid_hash_md, OPENKEY_ECDSA_HASH) );
+	if(r)
+		DO_ABORT(-15);
+
+	r = gcry_sexp_build(&sig_val, NULL, "(sig-val (ecdsa (r %b) (s %b) ) )",
+			OPENKEY_AUTHENTICITY_R_LENGTH, authenticity_data,
+			OPENKEY_AUTHENTICITY_S_LENGTH, authenticity_data + OPENKEY_AUTHENTICITY_R_LENGTH);
+
+	r = gcry_pk_verify(sig_val, sig_data, ctx->a.l.creation_pub_key);
+	if(r)
+		DO_ABORT(-16);
+
 
 	if(card_id != NULL) {
 		*card_id = strdup(uuid_buffer);
 		if(*card_id == NULL)
-			DO_ABORT(-11);
+			DO_ABORT(-17);
 	}
 
 	retval = 0;
 
 abort:
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
+	memset(uuid_mangled, 0, sizeof(uuid_mangled));
+	memset(authenticity_data, 0, sizeof(authenticity_data));
+	gcry_sexp_release(sig_data);
+	gcry_sexp_release(sig_val);
+	gcry_md_close(uuid_hash_md);
 	uuid_clear(app_uuid);
 
 	if(read_key != NULL) {
