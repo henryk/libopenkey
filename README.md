@@ -9,7 +9,7 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
   <dt>Separation of roles</dt>
   <dd>The party doing the card initialization is fully independent from the party doing the authentication.</dd> 
   <dt>Secure</dt>
-  <dd>All security is based on AES 128 bit. Master keys are randomly generated. All authentication keys are derived from master keys with card and/or slot specific identifiers.</dd>
+  <dd>All symmetric security is based on AES 128 bit. Master keys are randomly generated. All authentication keys are derived from master keys with card and/or slot specific identifiers. Full card authentication uses elliptic curve cryptography (a form of asymmetric cryptography): The lock does not have the necessary keys to forge a completely new card.</dd>
   <dt>Full anonymity on the radio channel</dt>
   <dd>No card identifying information is transmitted unencrypted on the radio channel after card initialization time.</dd>
   <dt>Optional pseudonymity for authentication</dt>
@@ -17,7 +17,6 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
 </dl>
 
 **Note**: Sadly, the NXP DESfire EV1 functional specification and documentation are subject to a non disclosure agreement (NDA). However, no DESfire operation in this framework is handled by the framework itself, all operations are done with functionality or documentation from libfreefare. It is the author's opinion that, given the prior publication of libfreefare and accompanying documentation, the publication of libopenkey does not violate the DESfire NDA.
-Is is also for this reason that libopenkey does not use the NXP SAM AV1 or AV2 standard key derivation mechanisms: They are not included in libfreefare and to the best of the author's knowledge still fall under the NDA. Instead, libopenkey uses a custom, simple HMAC-SHA256 based construction.
 
 ## Requirements
  * libgcrypt - For cryptographic operations and random numbers.
