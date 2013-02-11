@@ -20,13 +20,15 @@ static void usage(const char *prog, int usage_only)
 			"libopenkey framework for secure authentication.\n");
 	}
 
-	fprintf(stderr, "Usage: %s [-b | -y] base_directory [card_name]\n\n"
+	fprintf(stderr, "Usage: %s [-b | [-r] -y] base_directory [card_name [card_id]]\n\n"
 			"Options: \n"
 			"\t-b\tOnly bootstrap the card producer, do not produce a card\n"
-			"\t-y\tProduce a card and do not ask for confirmation before\n\t\tdoing so (DANGEROUS)\n\n"
+			"\t-y\tProduce a card and do not ask for confirmation before\n\t\tdoing so (DANGEROUS)\n"
+			"\t-r\tRe-Produce a card: Erase all slots on it and produce it\n\t\tas an empty card (DANGEROUS)\n\n"
 			"Arguments: \n"
 			"\tbase_directory\tThe name of the directory in which all\n\t\t\tkeys and associated data shall be stored\n"
-			"\tcard_name\tThe friendly name of the card to be initialized\n\t\t\tMandatory when not only bootstrapping\n",
+			"\tcard_name\tThe friendly name of the card to be initialized\n\t\t\tMandatory when not only bootstrapping\n"
+			"\tcard_id\t\tA card identifier (old card_name or UID)\n\t\t\tOptionally used for re-production\n",
 			prog);
 }
 
@@ -35,8 +37,9 @@ int main(int argc, char **argv)
 	int option;
 	int bootstrap_only = 0;
 	int no_confirmation = 0;
+	int recreate = 0;
 
-	while( (option = getopt(argc, argv, "by")) != -1 ) {
+	while( (option = getopt(argc, argv, "byr")) != -1 ) {
 		switch(option) {
 		case 'b':
 			bootstrap_only = 1;
@@ -44,14 +47,17 @@ int main(int argc, char **argv)
 		case 'y':
 			no_confirmation = 1;
 			break;
+		case 'r':
+			recreate = 1;
+			break;
 		default:
 			usage(argv[0], 0);
 			return -1;
 		}
 	}
 
-	if(bootstrap_only && no_confirmation) {
-		fprintf(stderr, "Error: Only bootstrapping and card production without confirmation are mutually exclusive\n\n");
+	if(bootstrap_only && (no_confirmation || recreate)) {
+		fprintf(stderr, "Error: Only bootstrapping and card production are mutually exclusive\n\n");
 		usage(argv[0], 1);
 		return -1;
 	}
@@ -64,6 +70,7 @@ int main(int argc, char **argv)
 
 	char *base_directory = argv[optind++];
 	char *card_name = NULL;
+	char *card_id = NULL;
 
 	if(!bootstrap_only) {
 		if(optind+1 > argc) {
@@ -72,6 +79,12 @@ int main(int argc, char **argv)
 			return -1;
 		}
 		card_name = argv[optind++];
+	}
+
+	if(recreate) {
+		if(optind+1 <= argc) {
+			card_id = argv[optind++];
+		}
 	}
 
 	if(optind != argc) {
@@ -129,7 +142,7 @@ int main(int argc, char **argv)
 			bool confirm = 0;
 
 			if(!no_confirmation) {
-				printf(": Initialize this card for use with openkey? (y/n) ");
+				printf(": %sInitialize this card for use with openkey? (y/n) ", recreate ? "Re-" : "");
 				confirm = helpers_confirm();
 			} else {
 				printf(". ");
@@ -137,8 +150,13 @@ int main(int argc, char **argv)
 
 			if(confirm || no_confirmation) {
 				printf("Initializing card ...\n");
+				int r = -1;
 
-				int r = openkey_producer_card_create(ctx, tag, card_name);
+				if(recreate) {
+					r = openkey_producer_card_recreate(ctx, tag, card_name, card_id);
+				} else {
+					r = openkey_producer_card_create(ctx, tag, card_name);
+				}
 				if(r < 0) {
 					printf("Error while initializing card. Error code: %i\n", r);
 					retval = -1;
