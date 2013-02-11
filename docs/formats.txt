@@ -76,6 +76,7 @@ After owning: application read key, no derivation applied
 === Key 2, Application authentication key ===
 Before owning: application transport authentication key
 After owning: KDF(master application authentication key, AID, "02", UUID)
+         OR : PBKDF(master application authentication key, AID, "02", UUID, password)
 
 === Key 3, Application authenticity update key ===
 Before owning: application transport authenticity update key
@@ -100,3 +101,7 @@ This application is reserved and may get administrative uses?
 == KDF(MK, AID, KEYNO, ID) ==
 AID is used in NXP order (e.g. little endian)
 HMAC-SHA256(MK, AID || KEYNO || ID), truncated from the beginning to the necessary key length
+
+== PBKDF(MK, AID, KEYNO, ID, PASSWORD) ==
+
+HMAC-SHA256( KDF(MK, AID, KEYNO, ID)[0:32byte], PBKDF2(password:=PASSWORD, salt:=UUID, count:=2048?, length:=32byte, prf=HMAC-SHA256) ), truncated from the beginning to the necessary key length
