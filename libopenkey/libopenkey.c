@@ -445,7 +445,7 @@ static int _add_producer(openkey_context_t ctx, const char *base_path)
 	int retval = -0x11;
 
 	if(producer_store != NULL) {
-		size_t r = getline(&buf, &buf_length, producer_store);
+		ssize_t r = getline(&buf, &buf_length, producer_store);
 
 		if( (r < 0) || (r < strlen(OPENKEY_PRODUCER_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_PRODUCER_MAGIC_V1)) ) {
 			goto abort;
@@ -489,7 +489,7 @@ static int _load_lock_data(struct lock_data *ld, const char *path)
 	int retval = -1;
 
 	if(lock_store != NULL) {
-		size_t r = getline(&buf, &buf_length, lock_store);
+		ssize_t r = getline(&buf, &buf_length, lock_store);
 
 		if( (r < 0) || (r < strlen(OPENKEY_LOCK_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_LOCK_MAGIC_V1)) ) {
 			goto abort;
@@ -596,7 +596,7 @@ static int _add_manager(openkey_context_t ctx, const char *base_path)
 	retval = -0x12;
 	fh = _fopen_in_dir(ctx->m.manager_path, OPENKEY_MANAGER_FILENAME, "r", 0);
 	if(fh != NULL) {
-		size_t r = getline(&buf, &buf_length, fh);
+		ssize_t r = getline(&buf, &buf_length, fh);
 
 		if( (r < 0) || (r < strlen(OPENKEY_MANAGER_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_MANAGER_MAGIC_V1)) ) {
 			goto abort;
@@ -1513,7 +1513,7 @@ int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const c
 		}
 
 		while(1) {
-			int r = getline(&buf, &buf_length, log_fh);
+			ssize_t r = getline(&buf, &buf_length, log_fh);
 			char *item = NULL;
 			char *saveptr = NULL;
 			if(r < 0) {
@@ -1669,7 +1669,7 @@ static struct transport_key_data *_load_transport_data(const char *file)
 		goto abort;
 	}
 
-	size_t r = getline(&buf, &buf_length, fh);
+	ssize_t r = getline(&buf, &buf_length, fh);
 	if( (r < 0) || (r < strlen(OPENKEY_TRANSPORT_MAGIC_V1)+1) || (buf_length < strlen(OPENKEY_TRANSPORT_MAGIC_V1)) ) {
 		goto abort;
 	}
