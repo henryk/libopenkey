@@ -22,7 +22,9 @@ static void usage(const char *prog, int usage_only)
 			"domain within the libopenkey framework for secure authentication.\n");
 	}
 
-	fprintf(stderr, "Usage: %s base_directory\n\n"
+	fprintf(stderr, "Usage: %s [-p] base_directory\n\n"
+			"Options: \n"
+			"\t-p\tAsk for and use a PIN or password in card authentication\n\n"
 			"Arguments: \n"
 			"\tbase_directory\tThe name of the directory in which all\n\t\t\tkeys and associated data shall be stored\n",
 			prog);
@@ -31,9 +33,13 @@ static void usage(const char *prog, int usage_only)
 int main(int argc, char **argv)
 {
 	int option;
+	int use_pin = 0;
 
-	while( (option = getopt(argc, argv, "bys:")) != -1 ) {
+	while( (option = getopt(argc, argv, "p")) != -1 ) {
 		switch(option) {
+		case 'p':
+			use_pin = 1;
+			break;
 		default:
 			usage(argv[0], 0);
 			return -1;
@@ -85,8 +91,23 @@ int main(int argc, char **argv)
 				}
 
 				char *card_id = NULL;
+				char *pin = NULL;
 
-				int r = openkey_authenticator_card_authenticate(ctx, tag, &card_id);
+				if(use_pin) {
+					pin = helpers_getpin(0);
+					if(pin == NULL) {
+						fprintf(stderr, "Error: Couldn't get PIN\n");
+					}
+				}
+
+				int r;
+				if(pin == NULL) {
+					r = openkey_authenticator_card_authenticate(ctx, tag, &card_id);
+				} else {
+					r = openkey_authenticator_card_authenticate_pw(ctx, tag, &card_id, pin, strlen(pin));
+					memset(pin, 0, strlen(pin));
+					free(pin);
+				}
 
 				if(r < 0) {
 					if(last_tag != NULL) {

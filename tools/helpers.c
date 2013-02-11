@@ -8,6 +8,8 @@
 #include "helpers.h"
 
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 static nfc_connstring devices[8];
@@ -133,4 +135,59 @@ bool helpers_confirm(void)
 		}
 	}
 	return 0;
+}
+
+char *helpers_getpin(int repeat)
+{
+	char *result = NULL;
+	char *tmp = NULL; // Statically allocated by getpass, do not free
+	char *pin = NULL, *pin_repeat = NULL;
+
+	tmp = getpass("PIN: ");
+	if(tmp == NULL) {
+		goto abort;
+	}
+
+	pin = strdup(tmp);
+	if(pin == NULL) {
+		goto abort;
+	}
+	memset(tmp, 0, strlen(tmp));
+
+	if(repeat) {
+		tmp = getpass("PIN (repeat): ");
+		if(tmp == NULL) {
+			goto abort;
+		}
+		pin_repeat = strdup(tmp);
+		if(pin_repeat == NULL) {
+			goto abort;
+		}
+		memset(tmp, 0, strlen(tmp));
+
+		if(strlen(pin) != strlen(pin_repeat)) {
+			goto abort;
+		}
+		if(strcmp(pin, pin_repeat) != 0) {
+			goto abort;
+		}
+	}
+
+	result = pin;
+
+abort:
+	if(tmp != NULL) {
+		memset(tmp, 0, strlen(tmp));
+	}
+
+	if(pin_repeat != NULL) {
+		memset(pin_repeat, 0, strlen(pin_repeat));
+		free(pin_repeat);
+	}
+
+	if(pin != NULL && result == NULL) {
+		memset(pin, 0, strlen(pin));
+		free(pin);
+	}
+	return result;
 }

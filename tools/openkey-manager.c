@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 static void usage(const char *prog, int usage_only)
 {
@@ -20,11 +21,12 @@ static void usage(const char *prog, int usage_only)
 			"domain within the libopenkey framework for secure authentication.\n");
 	}
 
-	fprintf(stderr, "Usage: %s [-b | -y] [-s slot] base_directory [transport_file]\n\n"
+	fprintf(stderr, "Usage: %s [-b | -y [-s slot] [-p] ] base_directory [transport_file]\n\n"
 			"Options: \n"
 			"\t-b\tOnly bootstrap the lock manager, do not operate on a card\n"
 			"\t-y\tOperate on a card and do not ask for confirmation before\n\t\tdoing so (DANGEROUS)\n"
-			"\t-s slot\tThe preferred slot (%i through %i, inclusive) of this lock\n\t\tdomain. Only evaluated at first bootstrap.\n\n"
+			"\t-s slot\tThe preferred slot (%i through %i, inclusive) of this lock\n\t\tdomain. Only evaluated at first bootstrap.\n"
+			"\t-p\tAsk for and use a PIN or password in card authentication\n\n"
 			"Arguments: \n"
 			"\tbase_directory\tThe name of the directory in which all\n\t\t\tkeys and associated data shall be stored\n"
 			"\ttransport_file\tThe file containing the slot transport keys\n\t\t\tMandatory when not only bootstrapping\n",
@@ -36,15 +38,19 @@ int main(int argc, char **argv)
 	int option;
 	int bootstrap_only = 0;
 	int no_confirmation = 0;
+	int use_pin = 0;
 	int slot = -1;
 
-	while( (option = getopt(argc, argv, "bys:")) != -1 ) {
+	while( (option = getopt(argc, argv, "bys:p")) != -1 ) {
 		switch(option) {
 		case 'b':
 			bootstrap_only = 1;
 			break;
 		case 'y':
 			no_confirmation = 1;
+			break;
+		case 'p':
+			use_pin = 1;
 			break;
 		case 's':
 			{
@@ -63,8 +69,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if(bootstrap_only && no_confirmation) {
-		fprintf(stderr, "Error: Only bootstrapping and card operation without confirmation are mutually exclusive\n\n");
+	if(bootstrap_only && (no_confirmation || use_pin)) {
+		fprintf(stderr, "Error: Only bootstrapping and card operation without confirmation or with PIN are mutually exclusive\n\n");
 		usage(argv[0], 1);
 		return -1;
 	}
@@ -149,9 +155,27 @@ int main(int argc, char **argv)
 			}
 
 			if(confirm || no_confirmation) {
+				char *pin = NULL;
+				if(use_pin) {
+					pin = helpers_getpin(1);
+					if(pin == NULL) {
+						fprintf(stderr, "Error getting PIN, aborting\n");
+						retval = -1;
+						goto abort;
+					}
+				}
+
 				printf("Associating card ...\n");
 
-				int r = openkey_manager_card_own(ctx, tag, slot, transport_key_file);
+				int r;
+				if(pin == NULL) {
+					r = openkey_manager_card_own(ctx, tag, slot, transport_key_file);
+				} else {
+					r = openkey_manager_card_own_pw(ctx, tag, slot, transport_key_file, pin, strlen(pin));
+					memset(pin, 0, strlen(pin));
+					free(pin);
+				}
+
 				if(r < 0) {
 					printf("Error while operating on card. Error code: %i\n", r);
 					retval = -1;

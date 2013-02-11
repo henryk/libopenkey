@@ -47,6 +47,7 @@ extern int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, 
 extern bool openkey_manager_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot);
 extern int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file);
+extern int openkey_manager_card_own_pw(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length);
 #if 0
 /* May be implemented later, not necessary for core operation */
 extern int openkey_manager_card_disown(openkey_context_t ctx, MifareTag tag, const char *card_name);
@@ -54,11 +55,17 @@ extern int openkey_manager_card_disown(openkey_context_t ctx, MifareTag tag, con
 
 extern int openkey_authenticator_prepare(openkey_context_t ctx);
 extern int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id);
+extern int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag tag, char **card_id, const uint8_t *pw, size_t pw_length);
 
 extern int openkey_fini(openkey_context_t ctx);
 
 extern int openkey_kdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
 		const uint8_t *data, size_t data_length,
+		uint8_t *derived_key, size_t derived_key_length);
+
+extern int openkey_pbkdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
+		const uint8_t *data, size_t data_length,
+		const uint8_t *pw, size_t pw_length, int iterations,
 		uint8_t *derived_key, size_t derived_key_length);
 
 #endif

@@ -30,6 +30,11 @@
 #include <uuid/uuid.h>
 
 #define OPENKEY_KDF_HMAC_ALGORITHM GCRY_MD_SHA256
+#define OPENKEY_PBKDF_HMAC_ALGORITHM GCRY_MD_SHA256
+#define OPENKEY_PBKDF_PRF GCRY_MD_SHA256
+#define OPENKEY_PBKDF_ITERATIONS_DEFAULT 2048
+#define OPENKEY_PBKDF_KDF_LENGTH 32
+#define OPENKEY_PBKDF_PBKDF2_LENGTH 32
 #define OPENKEY_ECDSA_HASH GCRY_MD_SHA256
 #define OPENKEY_ECDSA_CURVE "NIST P-256"
 
@@ -1024,6 +1029,77 @@ abort:
 	return retval;
 }
 
+int openkey_pbkdf(const uint8_t *master_key, size_t master_key_length, uint32_t aid, uint8_t key_no,
+		const uint8_t *data, size_t data_length,
+		const uint8_t *pw, size_t pw_length, int iterations,
+		uint8_t *derived_key, size_t derived_key_length)
+{
+	int retval = -1;
+	gcry_md_hd_t md = NULL;
+	uint8_t *kdf_key = NULL, *pbkdf2_key = NULL;
+	size_t kdf_key_length = OPENKEY_PBKDF_KDF_LENGTH, pbkdf2_key_length = OPENKEY_PBKDF_PBKDF2_LENGTH;
+
+	if(derived_key_length > gcry_md_get_algo_dlen(OPENKEY_PBKDF_HMAC_ALGORITHM)) {
+		goto abort;
+	}
+
+	if(iterations == 0) {
+		iterations = OPENKEY_PBKDF_ITERATIONS_DEFAULT;
+	}
+
+	if(data == NULL && data_length != 0) {
+		goto abort;
+	}
+
+	kdf_key = gcry_calloc_secure(1, kdf_key_length);
+	pbkdf2_key = gcry_calloc_secure(1, pbkdf2_key_length);
+
+	if(kdf_key == NULL || pbkdf2_key == NULL) {
+		goto abort;
+	}
+
+	if(openkey_kdf(master_key, master_key_length, aid, key_no, data, data_length, kdf_key, kdf_key_length) < 0) {
+		goto abort;
+	}
+
+	if(gcry_kdf_derive(pw, pw_length, GCRY_KDF_PBKDF2, OPENKEY_PBKDF_PRF, data, data_length, iterations, pbkdf2_key_length, pbkdf2_key) < 0) {
+		goto abort;
+	}
+
+	int r = gcry_md_open(&md, OPENKEY_PBKDF_HMAC_ALGORITHM, GCRY_MD_FLAG_SECURE|GCRY_MD_FLAG_HMAC);
+	if(r) {
+		goto abort;
+	}
+
+	r = gcry_md_setkey(md, kdf_key, kdf_key_length);
+	if(r) {
+		goto abort;
+	}
+
+	gcry_md_write(md, pbkdf2_key, pbkdf2_key_length);
+
+	gcry_md_final(md);
+
+	memcpy(derived_key, gcry_md_read(md, OPENKEY_PBKDF_HMAC_ALGORITHM), derived_key_length);
+
+	retval = 0;
+
+abort:
+	if(md != NULL) {
+		gcry_md_close(md);
+	}
+	if(pbkdf2_key != NULL) {
+		memset(pbkdf2_key, 0, pbkdf2_key_length);
+		gcry_free(pbkdf2_key);
+	}
+	if(kdf_key != NULL) {
+		memset(kdf_key, 0, kdf_key_length);
+		gcry_free(kdf_key);
+	}
+	return retval;
+}
+
+
 static char *_sanitize_card_name(const char *card_name)
 {
 	if(card_name == NULL) {
@@ -1736,7 +1812,7 @@ abort:
 	return result;
 }
 
-static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct transport_key_data *td)
+static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct transport_key_data *td, const uint8_t *pw, size_t pw_length)
 {
 	/* Note: As of 2013-02-02 mifare_desfire_read_ex() with cipher/mac has a bug in that it will
 	 * need a buffer that is large enough to hold both the payload data and mac/padding. So we'll
@@ -1812,9 +1888,17 @@ static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct t
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_unparse_lower(td->app_uuid, uuid_buffer);
 
-	r = openkey_kdf(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key),
-			mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
-			derived_authentication_key, derived_authentication_key_length);
+	if(pw == NULL) {
+		r = openkey_kdf(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key),
+				mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+				derived_authentication_key, derived_authentication_key_length);
+	} else {
+		r = openkey_pbkdf(ctx->m.l.master_authentication_key, sizeof(ctx->m.l.master_authentication_key),
+				mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+				pw, pw_length, 0,
+				derived_authentication_key, derived_authentication_key_length);
+
+	}
 	if(r < 0) {
 		goto abort;
 	}
@@ -2041,7 +2125,7 @@ abort:
 	return retval;
 }
 
-int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file)
+int openkey_manager_card_own_pw(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length)
 {
 	if(ctx == NULL || tag == NULL || !openkey_manager_is_bootstrapped(ctx)) {
 		return -1;
@@ -2071,7 +2155,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 			if(s[0] != 0 && end[0] == 0) {
 				slots_tried |= 1<<slot;
 
-				int r = _do_own_slot(ctx, tag, slot, td);
+				int r = _do_own_slot(ctx, tag, slot, td, pw, pw_length);
 				if(r >= 0) {
 					retval = r;
 					slots_tried = ~0;
@@ -2090,7 +2174,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 			}
 			slots_tried |= 1<<slot;
 
-			int r = _do_own_slot(ctx, tag, slot, td);
+			int r = _do_own_slot(ctx, tag, slot, td, pw, pw_length);
 			if(r >= 0) {
 				retval = r;
 				slots_tried = ~0;
@@ -2106,7 +2190,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 				}
 				slots_tried |= 1<<slot;
 
-				int r = _do_own_slot(ctx, tag, slot, td);
+				int r = _do_own_slot(ctx, tag, slot, td, pw, pw_length);
 				if(r >= 0) {
 					retval = r;
 					slots_tried = ~0;
@@ -2116,7 +2200,7 @@ int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, con
 		}
 
 	} else if(slot >= OPENKEY_SLOT_MIN && slot <= OPENKEY_SLOT_MAX) {
-		retval = _do_own_slot(ctx, tag, slot, td);
+		retval = _do_own_slot(ctx, tag, slot, td, pw, pw_length);
 	} else {
 		goto abort;
 	}
@@ -2137,7 +2221,12 @@ abort:
 	return retval;
 }
 
-static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot, char **card_id)
+int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file)
+{
+	return openkey_manager_card_own_pw(ctx, tag, slot, key_file, NULL, 0);
+}
+
+static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot, char **card_id, const uint8_t *pw, size_t pw_length)
 {
 	char uuid_mangled[UUID_MANGLED_LENGTH + 2*16 + 1];
 	char uuid_buffer[UUID_STRING_LENGTH + 1];
@@ -2187,9 +2276,17 @@ static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot,
 	memset(uuid_buffer, 0, sizeof(uuid_buffer));
 	uuid_unparse_lower(app_uuid, uuid_buffer);
 
-	r = openkey_kdf(ctx->a.l.master_authentication_key, sizeof(ctx->a.l.master_authentication_key),
-			mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
-			derived_authentication_key, derived_authentication_key_length);
+	if(pw == NULL) {
+		r = openkey_kdf(ctx->a.l.master_authentication_key, sizeof(ctx->a.l.master_authentication_key),
+				mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+				derived_authentication_key, derived_authentication_key_length);
+	} else {
+		r = openkey_pbkdf(ctx->a.l.master_authentication_key, sizeof(ctx->a.l.master_authentication_key),
+				mifare_desfire_aid_get_aid(aid), 2, (unsigned char*)uuid_buffer, UUID_STRING_LENGTH,
+				pw, pw_length, 0,
+				derived_authentication_key, derived_authentication_key_length);
+
+	}
 	if(r < 0)
 		DO_ABORT(-10);
 
@@ -2262,7 +2359,7 @@ abort:
 }
 
 
-int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id)
+int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag tag, char **card_id, const uint8_t *pw, size_t pw_length)
 {
 	if(ctx == NULL || tag == NULL || !ctx->a.prepared) {
 		return -1;
@@ -2286,7 +2383,7 @@ int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag
 				}
 				slots_tried |= 1<<slot;
 
-				r = _do_authenticate_slot(ctx, tag, slot, card_id);
+				r = _do_authenticate_slot(ctx, tag, slot, card_id, pw, pw_length);
 				if(r >= 0) {
 					retval = r;
 					goto abort;
@@ -2298,7 +2395,7 @@ int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag
 			}
 			slots_tried |= 1<<slot;
 
-			r = _do_authenticate_slot(ctx, tag, slot, card_id);
+			r = _do_authenticate_slot(ctx, tag, slot, card_id, pw, pw_length);
 			if(r >= 0) {
 				retval = r;
 				goto abort;
@@ -2311,4 +2408,9 @@ int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag
 abort:
 	mifare_desfire_disconnect(tag);
 	return retval;
+}
+
+int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id)
+{
+	return openkey_authenticator_card_authenticate_pw(ctx, tag, card_id, NULL, 0);
 }
