@@ -14,6 +14,8 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
   <dd>No card identifying information is transmitted unencrypted on the radio channel after card initialization time.</dd>
   <dt>Optional pseudonymity for authentication</dt>
   <dd>The identifiers used by authenticating parties are different for each slot and can not be correlated. (However, an authenticating party acting in bad faith <em>can</em> read the card unique identifier.)</dd>
+  <dt>Optional use of PIN or password</dt>
+  <dd>Card authentication can optionally be made dependent on a PIN or password, with no detectable change to the card data format. Since mutual authentication occurs this proves both: The card knows the authentication key for this lock domain, and the user knows the PIN for this card.</dd>
 </dl>
 
 **Note**: Sadly, the NXP DESfire EV1 functional specification and documentation are subject to a non disclosure agreement (NDA). However, no DESfire operation in this framework is handled by the framework itself, all operations are done with functionality or documentation from libfreefare. It is the author's opinion that, given the prior publication of libfreefare and accompanying documentation, the publication of libopenkey does not violate the DESfire NDA.
