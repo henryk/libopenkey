@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="641"
+   height="791"
+   id="svg3516"
+   version="1.1"
+   inkscape:version="0.48.3.1 r9886"
+   sodipodi:docname="card_protection.svg.2013_02_27_10_18_24.0.svg">
+  <defs
+     id="defs3518" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.98994949"
+     inkscape:cx="217.54384"
+     inkscape:cy="404.36519"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="true"
+     inkscape:snap-grids="true"
+     inkscape:window-width="1615"
+     inkscape:window-height="1026"
+     inkscape:window-x="65"
+     inkscape:window-y="24"
+     inkscape:window-maximized="1"
+     showguides="true"
+     inkscape:guide-bbox="true"
+     fit-margin-top="20"
+     fit-margin-left="20"
+     fit-margin-right="20"
+     fit-margin-bottom="20">
+    <inkscape:grid
+       type="xygrid"
+       id="grid3524"
+       empspacing="5"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       originx="-79.5px"
+       originy="-129.5px" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="70.5,750.5"
+       id="guide4317" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="-449.5,720.5"
+       id="guide4319" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="120.5,660.5"
+       id="guide4323" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="170.5,670.5"
+       id="guide4325" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="170.5,810.5"
+       id="guide4329" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="200.5,620.5"
+       id="guide4331" />
+  </sodipodi:namedview>
+  <metadata
+     id="metadata3521">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-79.5,-131.86218)">
+    <rect
+       style="fill:#d7fff5;fill-opacity:1;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       id="rect3526"
+       width="600"
+       height="750"
+       x="100"
+       y="152.36218" />
+    <rect
+       style="fill:#d7deff;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect4321"
+       width="550"
+       height="250"
+       x="150"
+       y="202.36218" />
+    <rect
+       style="fill:#ff6f53;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect4327"
+       width="500"
+       height="100"
+       x="200"
+       y="252.36218" />
+    <rect
+       style="fill:#b91e00;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect4333"
+       width="450"
+       height="50"
+       x="250"
+       y="302.36218" />
+    <rect
+       y="352.36218"
+       x="200"
+       height="100"
+       width="250"
+       id="rect4335"
+       style="fill:#ff53b0;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <rect
+       style="fill:#ffb553;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect2997"
+       width="250"
+       height="100"
+       x="450"
+       y="352.36218"
+       ry="0" />
+    <rect
+       y="352.36218"
+       x="250"
+       height="50"
+       width="400"
+       id="rect4337"
+       style="fill:#b90065;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="110"
+       y="182.36218"
+       id="text3767"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3769"
+         x="110"
+         y="182.36218"
+         style="font-size:24px">PICC master key</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="160.35715"
+       y="231.64789"
+       id="text3771"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3773"
+         x="160.35715"
+         y="231.64789">Slot 0: Application master key</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="450"
+       y="332.36218"
+       id="text3775"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3777"
+         x="450"
+         y="332.36218">Slot UUID</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="640"
+       y="382.36218"
+       id="text3779"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3781"
+         x="640"
+         y="382.36218">UUID Signature</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="690"
+       y="282.36218"
+       id="text3783"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3785"
+         x="690"
+         y="282.36218">Slot read key</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="440"
+       y="442.36218"
+       id="text3787"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3789"
+         x="440"
+         y="442.36218">Authentication key</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="690"
+       y="442.36218"
+       id="text3791"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3793"
+         x="690"
+         y="442.36218">Authenticity update</tspan></text>
+    <rect
+       y="502.36218"
+       x="150"
+       height="250"
+       width="550"
+       id="rect3010"
+       style="fill:#edd7ff;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <rect
+       y="552.36218"
+       x="200"
+       height="100"
+       width="500"
+       id="rect3012"
+       style="fill:#ffe953;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <rect
+       y="602.36218"
+       x="250"
+       height="50"
+       width="450"
+       id="rect3014"
+       style="fill:#b9a100;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <rect
+       style="fill:#ff6f53;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect3016"
+       width="250"
+       height="100"
+       x="200"
+       y="652.36218" />
+    <rect
+       ry="0"
+       y="652.36218"
+       x="450"
+       height="100"
+       width="250"
+       id="rect3018"
+       style="fill:#d0ff53;fill-opacity:1;stroke:#000000;stroke-opacity:1" />
+    <rect
+       style="fill:#b91e00;fill-opacity:1;stroke:#000000;stroke-opacity:1"
+       id="rect3020"
+       width="400"
+       height="50"
+       x="250"
+       y="652.36218" />
+    <text
+       sodipodi:linespacing="125%"
+       id="text3022"
+       y="531.64789"
+       x="160.35715"
+       style="font-size:24px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="531.64789"
+         x="160.35715"
+         id="tspan3024"
+         sodipodi:role="line">Slot 1: Application master key</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text3026"
+       y="632.36218"
+       x="450"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="632.36218"
+         x="450"
+         id="tspan3028"
+         sodipodi:role="line">Slot UUID</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text3030"
+       y="682.36218"
+       x="640"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="682.36218"
+         x="640"
+         id="tspan3032"
+         sodipodi:role="line">UUID Signature</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text3034"
+       y="582.36218"
+       x="690"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="582.36218"
+         x="690"
+         id="tspan3036"
+         sodipodi:role="line">Slot read key</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text3038"
+       y="742.36218"
+       x="440"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="742.36218"
+         x="440"
+         id="tspan3040"
+         sodipodi:role="line">Authentication key</tspan></text>
+    <text
+       sodipodi:linespacing="125%"
+       id="text3042"
+       y="742.36218"
+       x="690"
+       style="font-size:24px;font-style:normal;font-weight:normal;text-align:end;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:end;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       xml:space="preserve"><tspan
+         y="742.36218"
+         x="690"
+         id="tspan3044"
+         sodipodi:role="line">Authenticity update</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:40px;font-style:normal;font-weight:normal;text-align:center;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       x="400.0293"
+       y="782.36218"
+       id="text3046"
+       sodipodi:linespacing="125%"><tspan
+         sodipodi:role="line"
+         id="tspan3048"
+         x="400.0293"
+         y="782.36218">.</tspan><tspan
+         sodipodi:role="line"
+         x="400.0293"
+         y="832.36218"
+         id="tspan3050">.</tspan><tspan
+         sodipodi:role="line"
+         x="400.0293"
+         y="882.36218"
+         id="tspan3052">.</tspan></text>
+  </g>
+</svg>
