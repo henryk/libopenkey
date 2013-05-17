@@ -73,6 +73,11 @@ static const char * const PATH_SEPARATOR = "/";
 
 #define ROLEMASK(x) (1<<(x))
 
+/* Hack: libfreefare allows no direct access to the nfc_device. However, a pointer
+ * to it is the first member of the MifareTag structure, so a cast will do for now
+ */
+#define RFERROR(tag) (nfc_device_get_last_error(*(nfc_device**)tag) == NFC_ERFTRANS)
+
 struct openkey_context {
 	uint8_t roles_initialized;
 
@@ -2387,6 +2392,8 @@ int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag 
 				if(r >= 0) {
 					retval = r;
 					goto abort;
+				} else if(RFERROR(tag)) {
+					break;
 				}
 			}
 		} else if(slot >= OPENKEY_SLOT_MIN && slot <= OPENKEY_SLOT_MAX) {
@@ -2399,6 +2406,8 @@ int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag 
 			if(r >= 0) {
 				retval = r;
 				goto abort;
+			} else if(RFERROR(tag)) {
+				break;
 			}
 		} else {
 			continue;
