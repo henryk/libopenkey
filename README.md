@@ -25,6 +25,7 @@ This library provides a framework to use NXP DESfire EV1 cards as authentication
  * libuuid - For handling and generation of Universally Unique IDentifiers.
  * libfreefare >= 0.3.5 - For the actual DESfire communication.
  * libnfc >= 1.7.0-rc3 - For contactless card communication (also required by libfreefare).
+ * pam, for the pluggable authentication module.
  * autotools and libtool - For automatic configuration and makefiles
  * A libnfc supported reader
  * DESfire EV1 cards
@@ -114,3 +115,26 @@ after this command slot seven on Alice's card is associated with John's lock dom
 
 #### Happy end
 Alice can now use her card at home (with slot 0), at her hacker space (with slot 5) and in her work place (with slot 7). Since no identifying information about a lock domain is stored on the card in the process, Alice's employer can not find out from the card to which hacker space Alice goes. Also a thief/dishonest finder who happens upon the card has no way of knowing on which locks it will be of use.
+
+## Pluggable Authentication Module
+Since version 0.3 a pluggable authentication module (PAM) is provided which can authenticate against openkey tokens with PINs. Include it in your stack like so:
+
+    auth required pam_openkey.so /etc/openkey_secrets map_file=/etc/openkey-users
+
+where /etc/openkey_secrets should include the 'lock' file for the lock domain. The file /etc/openkey-users should contain a simple colon separated list of user names and slot UUIDs, one pair per line, no spaces. Lines that start with an '#' are ignored. Example:
+
+    robb:a56f18ba-c302-11e2-b0ff-b33c30e94d58
+    arya:ab37d57a-c302-11e2-b0ba-cf88b0b65e11
+    #theon:e11a7bf2-c302-11e2-86c8-d3ad17005637
+
+The same user may be listed multiple times.
+
+Alternatively the argument **map_file=...** may be omitted and **any_token** can be specified instead, which will allow any token in this lock domain for any user. One of either 'map_file=...' or 'any_token' must be specified.
+
+Further options:
+ * **debug** enables debug output on stderr and in syslog
+ * **alwaysok** always returns as if a successful authentication had taken place, strongly recommended during debugging
+ * **try_first_pass** tries to use the password that the previous authentication module in the stack passed on, if that doesn't work it queries for a password as normal
+ * **use_first_pass** forces the module to use the previous authentication module's password, will not query itself
+ * **no_pin** authenticates against openkey tokens with no PINs, will not query for a password nor use a previous authentication module's
+ * **allow_empty_pin** allows zero length passwords to be treated as valid PINs, whereas normally authentication would be attempted without PIN
