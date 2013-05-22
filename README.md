@@ -126,7 +126,7 @@ Since version 0.3 a pluggable authentication module (PAM) is provided which can 
 
     auth required pam_openkey.so /etc/openkey_secrets map_file=/etc/openkey-users
 
-where /etc/openkey_secrets should include the 'lock' file for the lock domain. The file /etc/openkey-users should contain a simple colon separated list of user names and slot UUIDs, one pair per line, no spaces. Lines that start with an '#' are ignored. Example:
+where /etc/openkey_secrets/ should contain the 'lock' file for the lock domain. The file /etc/openkey-users should contain a simple colon separated list of user names and slot UUIDs, one pair per line, no spaces. Lines that start with an '#' are ignored. Example:
 
     robb:a56f18ba-c302-11e2-b0ff-b33c30e94d58
     arya:ab37d57a-c302-11e2-b0ba-cf88b0b65e11
