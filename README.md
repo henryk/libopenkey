@@ -116,6 +116,9 @@ after this command slot seven on Alice's card is associated with John's lock dom
 #### Happy end
 Alice can now use her card at home (with slot 0), at her hacker space (with slot 5) and in her work place (with slot 7). Since no identifying information about a lock domain is stored on the card in the process, Alice's employer can not find out from the card to which hacker space Alice goes. Also a thief/dishonest finder who happens upon the card has no way of knowing on which locks it will be of use.
 
+## PINs
+Since 2013-02-12 support for personal identification numbers (PINs) exists. openkey-manager and openkey-authentication accept a new parameter -p which will enable this support. Associating a new card with the lock domain while giving parameter -p will ask for a PIN (twice, to check for typos) and then use this PIN in the derivation of the authentication key. Successful card authentication can then only take place with this PIN. Note: An empty/zero length PIN is not the same as no PIN.
+
 ## Pluggable Authentication Module
 Since version 0.3 a pluggable authentication module (PAM) is provided which can authenticate against openkey tokens with PINs. Include it in your stack like so:
 
