@@ -1,1 +1,1 @@
-SUBDIRS=libopenkey include examples tools
+SUBDIRS=libopenkey include examples tools pam
