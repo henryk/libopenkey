@@ -1067,7 +1067,7 @@ int openkey_pbkdf(const uint8_t *master_key, size_t master_key_length, uint32_t 
 		goto abort;
 	}
 
-	if(gcry_kdf_derive(pw, pw_length, GCRY_KDF_PBKDF2, OPENKEY_PBKDF_PRF, data, data_length, iterations, pbkdf2_key_length, pbkdf2_key) < 0) {
+	if(gcry_kdf_derive(pw, pw_length, GCRY_KDF_PBKDF2, OPENKEY_PBKDF_PRF, data, data_length, iterations, pbkdf2_key_length, pbkdf2_key) != 0) {
 		goto abort;
 	}
 
