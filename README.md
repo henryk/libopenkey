@@ -143,3 +143,4 @@ Further options:
  * **use_first_pass** forces the module to use the previous authentication module's password, will not query itself
  * **no_pin** authenticates against openkey tokens with no PINs, will not query for a password nor use a previous authentication module's
  * **allow_empty_pin** allows zero length passwords to be treated as valid PINs, whereas normally authentication would be attempted without PIN
+ * **find_user** finds the username from the token ID. The username from be first matching token will be used instead of anything passed to PAM.
