@@ -1,0 +1,12 @@
+#!/bin/sh
+
+DM=/usr/bin/slim
+
+NUM_CHILDS=$(pgrep -c -P $PID)
+
+if [ $NUM_CHILDS -gt 1 ]; then
+	exec openkey_slim_login
+else
+	sleep 1
+fi
+
