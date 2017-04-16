@@ -35,7 +35,7 @@
 
 struct status {
 	openkey_context_t ctx;
-	bool alwaysok, try_first_pass, use_first_pass, no_pin, allow_empty_pin, any_token, debug;
+	bool alwaysok, try_first_pass, use_first_pass, no_pin, allow_empty_pin, any_token, find_user, debug;
 	char *map_file;
 	char *secrets_directory;
 
@@ -76,6 +76,8 @@ static int parse_arguments(struct status *s, int argc, const char **argv)
 			s->any_token = 1;
 		} else if(strncasecmp(argv[i], "debug", 5) == 0) {
 			s->debug = 1;
+		} else if(strncasecmp(argv[i], "find_user", 9) == 0) {
+			s->find_user = 1;
 		} else if(strncasecmp(argv[i], "map_file=", 9) == 0) {
 			if(s->map_file != NULL) {
 				free(s->map_file);
@@ -98,7 +100,7 @@ static int parse_arguments(struct status *s, int argc, const char **argv)
 	return 0;
 }
 
-static int check_token_id(struct status *s)
+static int check_token_id(pam_handle_t *pamh, struct status *s)
 {
 	int retval = PAM_AUTH_ERR;
 	FILE *fh = NULL;
@@ -127,7 +129,7 @@ static int check_token_id(struct status *s)
 			continue;
 		}
 
-		if(strncasecmp(s->username, line, colonpos-line) != 0 || strlen(s->username) != colonpos-line) {
+		if(!s->find_user && (strncasecmp(s->username, line, colonpos-line) != 0 || strlen(s->username) != colonpos-line) ) {
 			D_DBG("Username '%s' doesn't match line '%s', ignored", s->username, line);
 			continue;
 		}
@@ -139,6 +141,13 @@ static int check_token_id(struct status *s)
 
 		if(strncasecmp(s->token_id, colonpos+1, strlen(s->token_id)) == 0) { // Ignore trailing garbage, f.e. white space
 			D_DBG("Token '%s' matched line '%s', succeeded", s->token_id, line);
+			if (s->find_user) {
+				char username[256];
+				strncpy(username, line, colonpos-line);
+				username[colonpos-line] = 0;
+				pam_set_item(pamh, PAM_USER, username);
+			}
+			
 			retval = PAM_SUCCESS;
 			break;
 		}
@@ -191,6 +200,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
 		D_ERR("Couldn't get the authenticating user");
 		goto abort;
 	}
+	
 
 retry:
 	if(!s->no_pin) {
@@ -267,7 +277,7 @@ retry:
 		if(s->any_token) {
 			retval = PAM_SUCCESS;
 		} else {
-			retval = check_token_id(s);
+			retval = check_token_id(pamh, s);
 		}
 	} else {
 		if(s->try_first_pass && !s->use_first_pass && !s->no_pin) {
