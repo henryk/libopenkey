@@ -124,12 +124,12 @@ int main(int argc, char **argv)
 		goto abort;
 	}
 
-	MifareTag tag = NULL;
+	FreefareTag tag = NULL;
 	retval = 0;
 
 	if(helpers_first_tag(NULL, &tag) > 0) {
 		do {
-			if(freefare_get_tag_type(tag) != DESFIRE) {
+			if(freefare_get_tag_type(tag) != MIFARE_DESFIRE) {
 				continue;
 			}
 

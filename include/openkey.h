@@ -41,21 +41,21 @@ extern int openkey_role_add(openkey_context_t ctx, enum openkey_role role, const
 
 extern bool openkey_producer_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_producer_bootstrap(openkey_context_t ctx);
-extern int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name);
-extern int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const char *card_name, const char *old_id);
+extern int openkey_producer_card_create(openkey_context_t ctx, FreefareTag tag, const char *card_name);
+extern int openkey_producer_card_recreate(openkey_context_t ctx, FreefareTag tag, const char *card_name, const char *old_id);
 
 extern bool openkey_manager_is_bootstrapped(openkey_context_t ctx);
 extern int openkey_manager_bootstrap(openkey_context_t ctx, int preferred_slot);
-extern int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file);
-extern int openkey_manager_card_own_pw(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length);
+extern int openkey_manager_card_own(openkey_context_t ctx, FreefareTag tag, int slot, const char *key_file);
+extern int openkey_manager_card_own_pw(openkey_context_t ctx, FreefareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length);
 #if 0
 /* May be implemented later, not necessary for core operation */
-extern int openkey_manager_card_disown(openkey_context_t ctx, MifareTag tag, const char *card_name);
+extern int openkey_manager_card_disown(openkey_context_t ctx, FreefareTag tag, const char *card_name);
 #endif
 
 extern int openkey_authenticator_prepare(openkey_context_t ctx);
-extern int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id);
-extern int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag tag, char **card_id, const uint8_t *pw, size_t pw_length);
+extern int openkey_authenticator_card_authenticate(openkey_context_t ctx, FreefareTag tag, char **card_id);
+extern int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, FreefareTag tag, char **card_id, const uint8_t *pw, size_t pw_length);
 
 extern int openkey_fini(openkey_context_t ctx);
 

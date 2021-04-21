@@ -74,7 +74,7 @@ static const char * const PATH_SEPARATOR = "/";
 #define ROLEMASK(x) (1<<(x))
 
 /* Hack: libfreefare allows no direct access to the nfc_device. However, a pointer
- * to it is the first member of the MifareTag structure, so a cast will do for now
+ * to it is the first member of the FreefareTag structure, so a cast will do for now
  */
 #define RFERROR(tag) (nfc_device_get_last_error(*(nfc_device**)tag) == NFC_ERFTRANS)
 
@@ -388,7 +388,7 @@ static char *_concat_paths(const char *a, const char *b)
 	}
 
 	path[0] = 0;
-	strncat(path, a, path_length);
+	strcpy(path, a);
 	strncat(path, PATH_SEPARATOR, path_length);
 	strncat(path, b, path_length);
 
@@ -1110,9 +1110,9 @@ static char *_sanitize_card_name(const char *card_name)
 	if(card_name == NULL) {
 		return NULL;
 	}
-
+	char * result=NULL;
 	size_t card_name_length = strlen(card_name) + 1;
-	char *result = malloc(card_name_length);
+	result = malloc(card_name_length);
 	if(result == NULL) {
 		return NULL;
 	}
@@ -1134,7 +1134,7 @@ static char *_sanitize_card_name(const char *card_name)
 }
 
 #define DO_ABORT(x) { retval = x; goto abort; }
-static int _openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name,
+static int _openkey_producer_card_create(openkey_context_t ctx, FreefareTag tag, const char *card_name,
 		const uint8_t *old_derived_key, size_t old_derived_key_length,
 		const uint8_t *old_uid, size_t old_uid_length)
 {
@@ -1498,12 +1498,12 @@ abort:
 	return retval;
 }
 
-int openkey_producer_card_create(openkey_context_t ctx, MifareTag tag, const char *card_name)
+int openkey_producer_card_create(openkey_context_t ctx, FreefareTag tag, const char *card_name)
 {
 	return _openkey_producer_card_create(ctx, tag, card_name, NULL, 0, NULL, 0);
 }
 
-static int _try_uid(openkey_context_t ctx, MifareTag tag, const uint8_t *uid, size_t uid_length, uint8_t **out_key, size_t *out_key_length)
+static int _try_uid(openkey_context_t ctx, FreefareTag tag, const uint8_t *uid, size_t uid_length, uint8_t **out_key, size_t *out_key_length)
 {
 	uint8_t *derived_key = NULL;
 	size_t derived_key_length = AES_KEY_LENGTH;
@@ -1556,7 +1556,7 @@ abort:
 	return retval;
 }
 
-int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const char *card_name, const char *old_id)
+int openkey_producer_card_recreate(openkey_context_t ctx, FreefareTag tag, const char *card_name, const char *old_id)
 {
 	int retval = -1;
 	int uid_found = 0;
@@ -1574,7 +1574,7 @@ int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const c
 	MifareDESFireKey key = NULL;
 
 	DIR *cards_dir = NULL;
-	struct dirent *entry = NULL, *result;
+	struct dirent *entry = NULL, *result = NULL;
 
 	char *sanitized_old_id = NULL;
 
@@ -1655,7 +1655,7 @@ int openkey_producer_card_recreate(openkey_context_t ctx, MifareTag tag, const c
 			goto abort;
 		}
 
-		while(readdir_r(cards_dir, entry, &result) >= 0) {
+		while(NULL != readdir(cards_dir)) {
 			if(result == NULL) {
 				break;
 			}
@@ -1817,7 +1817,7 @@ abort:
 	return result;
 }
 
-static int _do_own_slot(openkey_context_t ctx, MifareTag tag, int slot, struct transport_key_data *td, const uint8_t *pw, size_t pw_length)
+static int _do_own_slot(openkey_context_t ctx, FreefareTag tag, int slot, struct transport_key_data *td, const uint8_t *pw, size_t pw_length)
 {
 	/* Note: As of 2013-02-02 mifare_desfire_read_ex() with cipher/mac has a bug in that it will
 	 * need a buffer that is large enough to hold both the payload data and mac/padding. So we'll
@@ -2130,7 +2130,7 @@ abort:
 	return retval;
 }
 
-int openkey_manager_card_own_pw(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length)
+int openkey_manager_card_own_pw(openkey_context_t ctx, FreefareTag tag, int slot, const char *key_file, const uint8_t *pw, size_t pw_length)
 {
 	if(ctx == NULL || tag == NULL || !openkey_manager_is_bootstrapped(ctx)) {
 		return -1;
@@ -2226,12 +2226,12 @@ abort:
 	return retval;
 }
 
-int openkey_manager_card_own(openkey_context_t ctx, MifareTag tag, int slot, const char *key_file)
+int openkey_manager_card_own(openkey_context_t ctx, FreefareTag tag, int slot, const char *key_file)
 {
 	return openkey_manager_card_own_pw(ctx, tag, slot, key_file, NULL, 0);
 }
 
-static int _do_authenticate_slot(openkey_context_t ctx, MifareTag tag, int slot, char **card_id, const uint8_t *pw, size_t pw_length)
+static int _do_authenticate_slot(openkey_context_t ctx, FreefareTag tag, int slot, char **card_id, const uint8_t *pw, size_t pw_length)
 {
 	char uuid_mangled[UUID_MANGLED_LENGTH + 2*16 + 1];
 	char uuid_buffer[UUID_STRING_LENGTH + 1];
@@ -2364,7 +2364,7 @@ abort:
 }
 
 
-int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, MifareTag tag, char **card_id, const uint8_t *pw, size_t pw_length)
+int openkey_authenticator_card_authenticate_pw(openkey_context_t ctx, FreefareTag tag, char **card_id, const uint8_t *pw, size_t pw_length)
 {
 	if(ctx == NULL || tag == NULL || !ctx->a.prepared) {
 		return -1;
@@ -2419,7 +2419,7 @@ abort:
 	return retval;
 }
 
-int openkey_authenticator_card_authenticate(openkey_context_t ctx, MifareTag tag, char **card_id)
+int openkey_authenticator_card_authenticate(openkey_context_t ctx, FreefareTag tag, char **card_id)
 {
 	return openkey_authenticator_card_authenticate_pw(ctx, tag, card_id, NULL, 0);
 }

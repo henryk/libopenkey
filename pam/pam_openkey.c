@@ -239,10 +239,10 @@ retry:
 		}
 	}
 
-	MifareTag tag = NULL;
+	FreefareTag tag = NULL;
 	if(helpers_first_tag(NULL, &tag) > 0) {
 		do {
-			if(freefare_get_tag_type(tag) != DESFIRE) {
+			if(freefare_get_tag_type(tag) != MIFARE_DESFIRE) {
 				D_DBG("Token is not a DESfire card");
 				continue;
 			} else {

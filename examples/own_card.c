@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
-		MifareTag *tags = freefare_get_tags(device);
+		FreefareTag *tags = freefare_get_tags(device);
 		if(!tags) {
 			nfc_close (device);
 			fprintf(stderr, "Error while listing Mifare tags\n");
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 		}
 
 		for(int i = 0; tags[i]; i++) {
-			if(freefare_get_tag_type(tags[i]) != DESFIRE)
+			if(freefare_get_tag_type(tags[i]) != MIFARE_DESFIRE)
 				continue;
 
 			printf("Own card result: %i\n", openkey_manager_card_own(ctx, tags[i], -1, argv[1]));
